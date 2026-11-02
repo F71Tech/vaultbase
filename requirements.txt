@@ -1,0 +1,15 @@
+# Dependencias de VaultBase
+# Instalar con:  .venv\Scripts\python -m pip install -r requirements.txt
+# Las versiones están "fijadas" (==) para que el proyecto se instale
+# exactamente igual en tu PC y en el servidor de deploy.
+
+fastapi==0.162.0             # framework web para crear la API
+uvicorn[standard]==0.54.0    # servidor que ejecuta la app de FastAPI
+sqlmodel==0.0.48             # tablas de la base de datos como clases de Python
+pydantic-settings==2.16.2    # lee la configuración desde el archivo .env
+email-validator==2.3.0       # valida que los emails tengan formato correcto
+pyjwt==2.15.1                # crea y verifica los tokens JWT del login
+pwdlib[argon2]==0.3.1        # hashea contraseñas de forma segura (argon2)
+python-multipart==0.0.33     # permite recibir formularios (lo usa el login)
+httpx==0.28.1                # hace pedidos HTTP (cotización del dólar) y sirve para tests
+pytest==9.2.0                # corre los tests automáticos

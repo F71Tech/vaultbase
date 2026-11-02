@@ -1,0 +1,20 @@
+# Archivos que Git NO debe subir a GitHub
+
+# Entorno virtual (se recrea con pip install -r requirements.txt)
+.venv/
+
+# Caché de Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Configuración secreta (claves, contraseñas)
+.env
+
+# Base de datos local
+*.db
+
+# Editores / sistema
+.vscode/
+.idea/
+Thumbs.db

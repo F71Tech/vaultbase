@@ -1,0 +1,3 @@
+# Guardamos los archivos de texto con saltos de línea estilo Linux (LF).
+# Así el código es idéntico en Windows y en el servidor de deploy (Linux).
+* text=auto eol=lf
