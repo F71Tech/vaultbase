@@ -26,6 +26,10 @@ def build_crud_router(
     tag: str,        # título del grupo en /docs
     order_by,        # orden del listado (ej: Goal.created_at)
     include_list: bool = True,
+    # Validación extra después de editar, para reglas que dependen de varios
+    # campos (ej: la subcategoría debe pertenecer a la categoría final).
+    # Debe lanzar ValueError con un mensaje claro si algo no cuadra.
+    validate_item=None,
 ) -> APIRouter:
     router = APIRouter(prefix=prefix, tags=[tag])
     nombre = tag.lower()
@@ -64,6 +68,14 @@ def build_crud_router(
         item = get_owned(session, user.id, item_id)
         # exclude_unset: solo los campos que el cliente realmente envió
         item.sqlmodel_update(data.model_dump(exclude_unset=True))
+        if validate_item:
+            try:
+                validate_item(item)
+            except ValueError as error:
+                # rollback deshace los cambios en memoria: el registro vuelve
+                # a quedar exactamente como estaba en la base de datos
+                session.rollback()
+                raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(error))
         session.add(item)
         session.commit()
         session.refresh(item)

@@ -3,30 +3,48 @@ Gastos.
 
 - Fijo (fixed): se repite todos los meses desde `date` (alquiler, UTE, internet).
 - Variable (variable): ocurre una vez, el día `date` (el súper, un taxi, una salida).
-  Los gastos del día a día son variables.
+  Los gastos del día a día ("hoy me compré un alfajor") son variables.
+
+Cada gasto tiene una categoría principal (ej: food) y, opcionalmente, una
+subcategoría (ej: snacks). El árbol completo está en categories.py.
 """
 
 import datetime as dt
 from enum import Enum
 
+from pydantic import model_validator
 from sqlmodel import Field, SQLModel
 
+from ..categories import CATEGORY_TREE, is_valid_subcategory
 from .common import Currency, UpdateSchema, utcnow
 
 
 class ExpenseCategory(str, Enum):
-    food = "food"                # comida / supermercado
-    transport = "transport"      # transporte
-    housing = "housing"          # vivienda (alquiler, gastos comunes)
-    utilities = "utilities"      # servicios (UTE, OSE, Antel, internet)
-    health = "health"            # salud
-    education = "education"      # educación
-    leisure = "leisure"          # ocio / salidas
-    clothing = "clothing"        # ropa
-    tech = "tech"                # tecnología
-    pets = "pets"                # mascotas
-    gifts = "gifts"              # regalos
-    other = "other"              # otros
+    # Deben coincidir con las claves de CATEGORY_TREE (hay un test que lo controla)
+    food = "food"                    # comida
+    transport = "transport"          # transporte
+    housing = "housing"              # vivienda
+    utilities = "utilities"          # servicios (UTE, OSE, Antel)
+    health = "health"                # salud
+    personal_care = "personal_care"  # cuidado personal
+    education = "education"          # educación
+    leisure = "leisure"              # ocio
+    clothing = "clothing"            # ropa
+    tech = "tech"                    # tecnología
+    pets = "pets"                    # mascotas
+    gifts = "gifts"                  # regalos y donaciones
+    finance = "finance"              # bancos e impuestos
+    other = "other"                  # otros
+
+
+def check_subcategory(category, subcategory) -> None:
+    """Lanza un error claro si la subcategoría no pertenece a la categoría."""
+    if not is_valid_subcategory(category, subcategory):
+        key = getattr(category, "value", category)
+        validas = ", ".join(CATEGORY_TREE[key]["subcategories"]) or "ninguna"
+        raise ValueError(
+            f"La subcategoría '{subcategory}' no pertenece a '{key}'. Válidas: {validas}"
+        )
 
 
 class ExpenseKind(str, Enum):
@@ -36,6 +54,7 @@ class ExpenseKind(str, Enum):
 
 class ExpenseBase(SQLModel):
     category: ExpenseCategory
+    subcategory: str | None = Field(default=None, max_length=30)  # vacía = "general"
     amount_cents: int = Field(gt=0)
     currency: Currency = Currency.UYU
     kind: ExpenseKind = ExpenseKind.variable
@@ -58,7 +77,10 @@ class Expense(ExpenseBase, table=True):
 
 
 class ExpenseCreate(ExpenseBase):
-    pass
+    @model_validator(mode="after")
+    def _validar_subcategoria(self):
+        check_subcategory(self.category, self.subcategory)
+        return self
 
 
 class ExpenseRead(ExpenseBase):
@@ -67,9 +89,10 @@ class ExpenseRead(ExpenseBase):
 
 
 class ExpenseUpdate(UpdateSchema):
-    nullable_fields = {"end_date", "description", "exchange_rate"}
+    nullable_fields = {"subcategory", "end_date", "description", "exchange_rate"}
 
     category: ExpenseCategory | None = None
+    subcategory: str | None = Field(default=None, max_length=30)
     amount_cents: int | None = Field(default=None, gt=0)
     currency: Currency | None = None
     kind: ExpenseKind | None = None

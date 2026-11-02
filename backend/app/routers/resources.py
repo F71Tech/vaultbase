@@ -20,6 +20,7 @@ from ..models import (
     Subscription, SubscriptionCreate, SubscriptionRead, SubscriptionUpdate,
     WishItem, WishItemCreate, WishItemRead, WishItemUpdate,
 )
+from ..models.expense import check_subcategory
 from .crud import build_crud_router
 
 incomes_router = build_crud_router(
@@ -50,6 +51,7 @@ expenses_router = build_crud_router(
     model=Expense, create_schema=ExpenseCreate, read_schema=ExpenseRead,
     update_schema=ExpenseUpdate, prefix="/api/expenses", tag="Gastos",
     order_by=Expense.date, include_list=False,
+    validate_item=lambda e: check_subcategory(e.category, e.subcategory),
 )
 
 
@@ -61,6 +63,7 @@ def list_expenses(
     from_date: Annotated[dt.date | None, Query(description="Desde (incluida)")] = None,
     to_date: Annotated[dt.date | None, Query(description="Hasta (incluida)")] = None,
     category: ExpenseCategory | None = None,
+    subcategory: str | None = None,
     kind: ExpenseKind | None = None,
     limit: Annotated[int, Query(ge=1, le=1000)] = 500,
     offset: Annotated[int, Query(ge=0)] = 0,
@@ -74,6 +77,8 @@ def list_expenses(
         stmt = stmt.where(Expense.date <= to_date)
     if category:
         stmt = stmt.where(Expense.category == category)
+    if subcategory:
+        stmt = stmt.where(Expense.subcategory == subcategory)
     if kind:
         stmt = stmt.where(Expense.kind == kind)
     stmt = stmt.order_by(Expense.date.desc(), Expense.id.desc()).offset(offset).limit(limit)

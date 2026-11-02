@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import get_settings
 from .database import create_db_and_tables
-from .routers import auth, resources, users
+from .routers import auth, categories, resources, users
 
 settings = get_settings()
 
@@ -55,6 +55,7 @@ def health():
 
 app.include_router(auth.router)
 app.include_router(users.router)
+app.include_router(categories.router)
 app.include_router(resources.incomes_router)
 app.include_router(resources.expenses_router)
 app.include_router(resources.subscriptions_router)
