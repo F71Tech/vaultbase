@@ -16,7 +16,7 @@ from sqlmodel import Session, select
 from ..deps import CurrentUser, SessionDep
 from ..models import Currency, Expense, Goal, Income, Subscription, User, WishItem
 from ..models.common import today_uy
-from ..services import finance
+from ..services import finance, goal_plan
 from ..services.exchange import RateUnavailable, get_current_rate
 from ..services.simulator import InstallmentOption, SimulationResult, simulate_purchase
 
@@ -154,6 +154,19 @@ def goals(session: SessionDep, user: CurrentUser):
     except finance.RateMissing:
         raise _rate_error()
     return finance.project_goals(data.goals, capacity.monthly_savings_cents, today)
+
+
+@router.get("/finance/goals/{goal_id}/plan", response_model=goal_plan.GoalPlan)
+def plan(goal_id: int, session: SessionDep, user: CurrentUser):
+    """Plan para llegar a una meta: aporte por mes, hitos y qué ajustar si no alcanza."""
+    data = _load_data(session, user)
+    goal = next((g for g in data.goals if g.id == goal_id), None)
+    if goal is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Meta no encontrada")
+    try:
+        return goal_plan.goal_plan(data, goal, today_uy(), _usd_rate(session))
+    except finance.RateMissing:
+        raise _rate_error()
 
 
 # --- Simulador --------------------------------------------------------------

@@ -146,7 +146,7 @@ function renderGoals() {
 // --- Comida por semana ---
 function renderFood() {
   const f = overview.food;
-  $("food-pct").innerHTML = `${f.percentage}% del disponible <i data-lucide="pencil" class="w-3 h-3"></i>`;
+  $("food-pct").innerHTML = `<i data-lucide="sliders-horizontal" class="w-3.5 h-3.5"></i>${f.percentage}% · Ajustar`;
   countUp($("food-remaining"), f.remaining_cents);
   $("food-remaining").classList.toggle("text-danger", f.remaining_cents < 0);
   $("food-caption").textContent = f.remaining_cents < 0

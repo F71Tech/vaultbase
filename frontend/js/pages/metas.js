@@ -4,7 +4,7 @@ import { api } from "../api.js";
 import { centsToInput, money, parseMoney } from "../format.js";
 import { mountShell } from "../shell.js";
 import {
-  celebrate, confirmDialog, countUp, createSheet, esc, icons, notifyDataChanged, onDataChanged, toast,
+  celebrate, confirmDialog, countUp, createSheet, esc, fillBars, icons, notifyDataChanged, onDataChanged, toast,
 } from "../ui.js";
 
 const $ = (id) => document.getElementById(id);
@@ -55,8 +55,9 @@ function goalCard(g, p, index) {
     ${deadline}
     ${p.status === "completed" ? "" : `<div class="muted text-sm mt-1">Aporte: ${money(p.monthly_contribution_cents)}/mes ${p.contribution_is_manual ? "(fijo)" : "(automático)"}</div>`}
     <div class="flex gap-2 mt-4">
-      ${p.status === "completed" ? "" : `<button class="btn btn-primary flex-1 text-sm" data-add-saving="${g.id}"><i data-lucide="plus" class="w-4 h-4"></i>Sumar ahorro</button>`}
-      <button class="btn btn-ghost text-sm ${p.status === "completed" ? "flex-1" : ""}" data-edit="${g.id}"><i data-lucide="pencil" class="w-4 h-4"></i>Editar</button>
+      ${p.status === "completed" ? "" : `<button class="btn btn-primary flex-1 text-sm" data-add-saving="${g.id}"><i data-lucide="plus" class="w-4 h-4"></i>Sumar ahorro</button>
+      <button class="btn btn-ghost text-sm" data-plan="${g.id}"><i data-lucide="map" class="w-4 h-4"></i>Plan</button>`}
+      <button class="btn btn-ghost text-sm ${p.status === "completed" ? "flex-1" : ""}" data-edit="${g.id}" aria-label="Editar"><i data-lucide="pencil" class="w-4 h-4"></i>${p.status === "completed" ? "Editar" : ""}</button>
     </div>
   </article>`;
 }
@@ -211,10 +212,105 @@ function openSavingSheet(goal) {
   savingSheet.open();
 }
 
+// --- Hoja: el plan para llegar a la meta ---
+// El backend calcula todo (/api/finance/goals/{id}/plan); acá solo lo dibujamos.
+const TIP_ICON = {
+  set_contribution: "lock", aguinaldo: "gift", cut: "scissors", subscriptions: "repeat", extend: "calendar-clock",
+};
+const BASED_ON = {
+  deadline: (when) => `para llegar a tu fecha límite, en <b>${when}</b>`,
+  contribution: (when) => `con tu aporte actual llegás en <b>${when}</b>`,
+  suggested: (when) => `sin fecha límite te proponemos llegar en un año: <b>${when}</b>`,
+};
+const isoMonth = (y, m) => `${y}-${String(m).padStart(2, "0")}-01`;
+const shortMonth = (y, m) => new Date(y, m - 1, 1).toLocaleDateString("es-UY", { month: "short", year: "2-digit" });
+
+function planHTML(plan) {
+  const when = monthYear(isoMonth(plan.finish_year, plan.finish_month));
+  const status = plan.gap_cents
+    ? `<div class="rounded-xl bg-danger-soft p-3 text-sm flex gap-2 items-start"><i data-lucide="circle-alert" class="w-4 h-4 mt-0.5 text-danger shrink-0"></i>
+        <span>Hoy le van <b>${money(plan.current_contribution_cents)}/mes</b>: te faltan <b>${money(plan.gap_cents)}</b> por mes para cumplir el plan.</span></div>`
+    : `<div class="rounded-xl bg-primary-soft p-3 text-sm flex gap-2 items-center"><i data-lucide="circle-check" class="w-4 h-4 text-success shrink-0"></i>
+        <span>${plan.current_contribution_cents > plan.monthly_cents
+          ? `Hoy le van <b>${money(plan.current_contribution_cents)}/mes</b>: si lo sostenés, llegás antes.`
+          : "Tu aporte actual alcanza. Solo hay que sostenerlo."}</span></div>`;
+
+  const tips = plan.tips.length ? `
+    <h4 class="font-display font-bold mt-6 mb-3">Cómo cerrar la diferencia</h4>
+    <ul class="space-y-2">${plan.tips.map((t, i) => `
+      <li class="card p-3 flex gap-3 items-start rise" style="animation-delay:${0.15 + i * 0.06}s">
+        <span class="grid place-items-center w-9 h-9 rounded-xl bg-accent-soft text-accent shrink-0"><i data-lucide="${TIP_ICON[t.kind] ?? "lightbulb"}" class="w-4 h-4"></i></span>
+        <div class="min-w-0 flex-1">
+          <div class="font-medium text-sm">${esc(t.title)}</div>
+          <div class="muted text-xs mt-0.5">${esc(t.detail)}</div>
+          ${t.kind === "set_contribution" ? `<button class="btn btn-primary text-xs mt-2 py-1.5" data-set-contribution="${t.amount_cents}">Fijar aporte</button>` : ""}
+        </div>
+      </li>`).join("")}</ul>` : "";
+
+  const steps = [
+    `Cuando cobres, separá <b>${money(plan.monthly_cents)}</b> antes de gastar en otra cosa.`,
+    "Guardalo aparte (otra cuenta o caja de ahorro) para no tocarlo sin querer.",
+    "Cada mes tocá <b>Sumar ahorro</b> acá: así ves si vas al día con los hitos.",
+  ];
+
+  const milestones = plan.milestones.map((m, i) => `
+    <li class="grid grid-cols-[3.5rem_1fr_auto] gap-3 items-center rise" style="animation-delay:${0.2 + i * 0.04}s">
+      <span class="text-xs muted capitalize">${shortMonth(m.year, m.month)}</span>
+      <div class="bar"><span data-fill="${m.progress_pct}" style="background:${m.is_last ? "var(--success)" : "var(--primary)"}"></span></div>
+      <span class="text-xs tabular-nums text-right">${money(m.saved_cents)}${m.aguinaldo_cents ? ` <i data-lucide="gift" class="inline w-3 h-3 text-accent" aria-label="mes de aguinaldo"></i>` : ""}${m.is_last ? ` <i data-lucide="flag" class="inline w-3 h-3 text-success"></i>` : ""}</span>
+    </li>`).join("");
+
+  return `
+    <p class="muted text-sm">Plan · ${esc(plan.name)}</p>
+    <div class="mt-2 font-display text-4xl font-bold text-primary" id="plan-monthly">$ 0</div>
+    <p class="text-sm mt-1">por mes, ${BASED_ON[plan.based_on](when)}.</p>
+    <div class="flex gap-2 mt-3 mb-4 flex-wrap">
+      <span class="chip">≈ ${money(plan.weekly_cents)} por semana</span>
+      <span class="chip">≈ ${money(plan.daily_cents)} por día</span>
+    </div>
+    ${status}
+    ${tips}
+    <h4 class="font-display font-bold mt-6 mb-3">Tus pasos</h4>
+    <ol class="space-y-2 text-sm">${steps.map((s, i) => `
+      <li class="flex gap-3"><span class="grid place-items-center w-6 h-6 rounded-full bg-primary-soft text-primary text-xs font-bold shrink-0">${i + 1}</span><span>${s}</span></li>`).join("")}</ol>
+    <h4 class="font-display font-bold mt-6 mb-1">Hitos</h4>
+    <p class="muted text-xs mb-3">Lo que deberías tener ahorrado a fin de cada mes${plan.milestones.some((m) => m.aguinaldo_cents) ? " · <i data-lucide=\"gift\" class=\"inline w-3 h-3 text-accent\"></i> = cobrás aguinaldo" : ""}.</p>
+    <ul class="space-y-2.5">${milestones}</ul>
+    <button class="btn btn-ghost w-full mt-6" data-close>Cerrar</button>`;
+}
+
+let planSheet;
+let planGoal = null;
+async function openPlanSheet(goal) {
+  planGoal = goal;
+  planSheet ??= createSheet(`<div id="plan-body" class="min-h-40"></div>`, { label: "Plan de la meta" });
+  if (!planSheet.ready) {
+    planSheet.ready = true;
+    planSheet.el.addEventListener("click", async (e) => {
+      const btn = e.target.closest("[data-set-contribution]");
+      if (!btn) return;
+      btn.disabled = true;
+      await api(`/api/goals/${planGoal.id}`, { method: "PATCH", body: { monthly_contribution_cents: Number(btn.dataset.setContribution) } });
+      toast(`Aporte fijo para ${planGoal.name}`);
+      notifyDataChanged();
+      openPlanSheet(planGoal);  // redibuja el plan con el aporte nuevo
+    });
+  }
+  const body = planSheet.el.querySelector("#plan-body");
+  if (!planSheet.el.classList.contains("sheet-open")) body.innerHTML = `<p class="muted text-sm">Armando tu plan…</p>`;
+  planSheet.open();
+  const plan = await api(`/api/finance/goals/${goal.id}/plan`);
+  body.innerHTML = planHTML(plan);
+  icons();
+  fillBars(body);
+  countUp(body.querySelector("#plan-monthly"), plan.monthly_cents);
+}
+
 function init() {
   $("add-goal").addEventListener("click", () => openGoalSheet());
   document.addEventListener("click", (e) => {
     const find = (attr) => goals.find((g) => g.id === Number(e.target.closest(`[${attr}]`)?.getAttribute(attr)));
+    if (e.target.closest("[data-plan]")) openPlanSheet(find("data-plan"));
     if (e.target.closest("[data-add-saving]")) openSavingSheet(find("data-add-saving"));
     if (e.target.closest("[data-edit]")) openGoalSheet(find("data-edit"));
     if (e.target.closest("[data-new]")) openGoalSheet();
