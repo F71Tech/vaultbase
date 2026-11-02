@@ -3,6 +3,7 @@
 // tema claro/oscuro y hojas (modales).
 // =========================================================================
 
+import { ApiError } from "./api.js";
 import { money } from "./format.js";
 
 /** Dibuja los íconos Lucide (<i data-lucide="nombre">) que haya en la página. */
@@ -125,11 +126,14 @@ export function confirmDialog(message, { confirmText = "Borrar" } = {}) {
 }
 
 // --- Red de seguridad para errores ---
-// Si algún pedido falla y nadie lo atrapó (ej: se cayó la conexión), en vez de
-// que no pase nada en pantalla, mostramos el mensaje en un aviso rojo.
+// Si algún pedido a la API falla y nadie lo atrapó (ej: se cayó la conexión),
+// en vez de que no pase nada en pantalla, mostramos el mensaje en un aviso rojo.
+// SOLO errores de nuestra API (ApiError): el navegador también lanza errores
+// internos que no le importan al usuario (ej: "Transition was skipped" cuando
+// se saltea la animación entre páginas) y no queremos asustar a nadie con eso.
 window.addEventListener("unhandledrejection", (event) => {
-  const message = event.reason?.message;
-  if (message && event.reason?.status !== 401) toast(message, "error");
+  const error = event.reason;
+  if (error instanceof ApiError && error.status !== 401) toast(error.message, "error");
 });
 
 // --- Brillo que sigue al mouse en las tarjetas ---
