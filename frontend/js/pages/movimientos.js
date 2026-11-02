@@ -39,7 +39,8 @@ function expenseRow(e, detail) {
       <span class="icon-badge" style="background:color-mix(in srgb, ${color} 16%, transparent);color:${color}">
         <i data-lucide="${cat?.icon || "circle"}"></i></span>
       <span class="flex-1 min-w-0">
-        <span class="block font-medium truncate">${esc(title)}</span>
+        <span class="block font-medium truncate">${esc(title)}${e.kind === "one_off"
+          ? ` <span class="chip text-accent align-middle" style="padding:1px 8px;font-size:.65rem">Puntual</span>` : ""}</span>
         <span class="block muted text-xs truncate">${esc(detail)}</span>
       </span>
       <span class="text-right font-semibold">${moneyExact(e.amount_cents, e.currency)}${pesos}</span>
@@ -116,7 +117,7 @@ async function load() {
   const range = monthRange();
   // Pedimos todo en paralelo (Promise.all) en vez de uno por uno: es más rápido
   const [monthItems, fixedAll, incomes, summary] = await Promise.all([
-    api(`/api/expenses?from_date=${range.from}&to_date=${range.to}&kind=variable`),
+    api(`/api/expenses?from_date=${range.from}&to_date=${range.to}&kind=variable&kind=one_off`),
     api("/api/expenses?kind=fixed&limit=1000"),
     api("/api/incomes"),
     api(`/api/finance/month?year=${view.year}&month=${view.month}`),

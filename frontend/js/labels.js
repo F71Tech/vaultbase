@@ -8,7 +8,11 @@ import { api } from "./api.js";
 export const FREQUENCY = {
   weekly: "Semanal", biweekly: "Quincenal", monthly: "Mensual", annual: "Anual", one_time: "Única vez",
 };
-export const KIND = { variable: "Variable", fixed: "Fijo (todos los meses)" };
+export const KIND = {
+  variable: "Del día a día",
+  one_off: "Puntual (no es habitual)",
+  fixed: "Fijo (todos los meses)",
+};
 export const PRIORITY = { high: "Alta", medium: "Media", low: "Baja" };
 export const SUB_FREQUENCY = { monthly: "Mensual", annual: "Anual" };
 

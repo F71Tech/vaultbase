@@ -4,7 +4,7 @@ import { api } from "../api.js";
 import { centsToInput, money, parseMoney, shortDate } from "../format.js";
 import { mountShell } from "../shell.js";
 import {
-  celebrate, confirmDialog, countUp, createSheet, esc, fillBars, icons, notifyDataChanged, onDataChanged, toast,
+  celebrate, confirmDialog, countUp, createSheet, css, esc, fillBars, icons, notifyDataChanged, onDataChanged, toast,
 } from "../ui.js";
 
 const $ = (id) => document.getElementById(id);
@@ -297,16 +297,41 @@ function planIdeas(plan, heading = `Ideas para conseguir los ${money(plan.gap_ce
 }
 
 // 1 bis) Metas con fecha cercana: el presupuesto real, calculado día por día
-// (services/cashflow.py goal_budget): cobros, cuentas, aguinaldo y gastos habituales.
-const STEP_ICON = { income: "banknote", advance: "banknote", aguinaldo: "gift", fixed: "house", goal: "plane" };
+// (services/cashflow.py goal_budget): cobros, cuentas, aguinaldo, puntuales y
+// gastos habituales. El usuario puede ajustar el gasto por día y el colchón.
+const STEP_ICON = {
+  income: "banknote", advance: "banknote", aguinaldo: "gift", fixed: "house", one_off: "shopping-bag", goal: "plane",
+};
 const longDate = (iso) => new Date(iso + "T00:00").toLocaleDateString("es-UY", { day: "numeric", month: "long" });
+const CUSHIONS = [[0, "Sin colchón"], [7, "1 semana"], [14, "2 semanas"]];
 
 function planBudget(plan) {
   const b = plan.budget;
   const ok = b.difference_cents >= 0;
+  const adjusted = b.daily_cents !== b.usual_daily_cents || b.cushion_days !== 7;
   const verdict = ok
     ? `Tu objetivo es ${money(b.target_cents)}: <b>te alcanza y te sobran ${money(b.difference_cents)}</b>. Si querés, ${esc(plan.name)} puede ser más grande.`
-    : `Tu objetivo es ${money(b.target_cents)}: <b>te faltan ${money(-b.difference_cents)}</b>. Abajo tenés ideas para conseguirlos.`;
+    : `Tu objetivo es ${money(b.target_cents)}: <b>te faltan ${money(-b.difference_cents)}</b>.`;
+  const margin = b.max_daily_cents >= b.usual_daily_cents
+    ? `Hoy solés gastar unos ${money(b.usual_daily_cents)} por día: <b class="text-success">tenés margen</b>.`
+    : `Hoy solés gastar unos ${money(b.usual_daily_cents)} por día: <b class="text-danger">vas a tener que ajustarte</b>.`;
+  const guide = b.max_daily_cents > 0 ? `
+    <div class="grid grid-cols-2 gap-3 mt-4">
+      <div class="rounded-xl p-4 bg-primary-soft">
+        <div class="muted text-xs">Podés gastar hasta</div>
+        <div class="font-display text-2xl font-bold text-primary">${money(b.max_daily_cents)}</div>
+        <div class="muted text-xs">por día</div>
+      </div>
+      <div class="rounded-xl p-4 bg-primary-soft">
+        <div class="muted text-xs">o sea, hasta</div>
+        <div class="font-display text-2xl font-bold text-primary">${money(b.max_weekly_cents)}</div>
+        <div class="muted text-xs">por semana</div>
+      </div>
+      <p class="col-span-2 text-xs muted">…hasta el ${longDate(b.covers_until)}, y aun así pagás los ${money(b.target_cents)} de ${esc(plan.name)}
+        y te queda el colchón. ${margin}</p>
+    </div>`
+    : `<p class="mt-4 rounded-xl bg-danger-soft p-3 text-sm">Aunque no gastes nada en el día a día, no llegás a juntar todo para esa fecha. Mirá las ideas de abajo o mové la fecha.</p>`;
+
   const rows = b.steps.map((s) => s.kind === "goal" ? `
       <li class="flex items-center gap-2 rounded-lg px-2 py-1.5 -mx-2 bg-accent-soft">
         <span class="text-xs w-14 shrink-0 font-medium">${shortDate(s.date)}</span>
@@ -320,6 +345,9 @@ function planBudget(plan) {
         <span class="flex-1 min-w-0 truncate">${esc(s.label)}</span>
         <span class="tabular-nums ${s.amount_cents > 0 ? "text-success" : ""}">${s.amount_cents > 0 ? "+" : "−"}${money(Math.abs(s.amount_cents))}</span>
       </li>`).join("");
+
+  // El deslizador llega hasta el doble de tu promedio (o un poco más que el tope)
+  const sliderMax = Math.max(b.usual_daily_cents * 2, Math.round(b.max_daily_cents * 1.3), 100_000);
   return `
     <p class="text-sm mt-3">Para el <b>${longDate(b.deadline)}</b> podés tener hasta:</p>
     <div class="mt-1 flex items-baseline gap-2 flex-wrap">
@@ -330,11 +358,35 @@ function planBudget(plan) {
       <i data-lucide="${ok ? "circle-check" : "circle-alert"}" class="w-4 h-4 mt-0.5 shrink-0 ${ok ? "text-success" : "text-danger"}"></i>
       <span>${verdict}</span>
     </div>
-    ${b.short_before ? `<p class="mt-2 rounded-xl bg-danger-soft p-3 text-sm">Ojo: antes de esa fecha tu plata ya no alcanza para tus gastos de siempre. Revisá tus gastos de estas semanas.</p>` : ""}
+    ${b.short_before ? `<p class="mt-2 rounded-xl bg-danger-soft p-3 text-sm">Ojo: antes de esa fecha tu plata ya no alcanza para tus gastos de siempre.</p>` : ""}
+    ${guide}
 
     <div class="card p-4 mt-5">
-      <h4 class="font-display font-bold mb-1">Cómo llega tu plata</h4>
-      <p class="muted text-xs mb-3">Hoy tenés ${money(b.start_cents)}. Contamos cada cobro y cada cuenta en su día, y lo que solés gastar día a día.</p>
+      <h4 class="font-display font-bold mb-1">Tu plata día por día</h4>
+      <p class="muted text-xs mb-3">Gastando ${money(b.daily_cents)} por día y poniendo ${money(b.goal_spend_cents)} en ${esc(plan.name)} el ${shortDate(b.deadline)}.</p>
+      <div style="height:190px"><canvas id="plan-chart" role="img" aria-label="Gráfico de tu saldo día por día"></canvas></div>
+      <div class="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs muted">
+        <span><span class="inline-block w-2 h-2 rounded-full align-middle" style="background:var(--accent)"></span> ${esc(plan.name)}</span>
+        <span><span class="inline-block w-2 h-2 rounded-full align-middle" style="background:var(--danger)"></span> Tu día más justo (${shortDate(b.lowest_date)}: te quedan ${money(b.lowest_cents)})</span>
+      </div>
+    </div>
+
+    <div class="card p-4 mt-4">
+      <h4 class="font-display font-bold mb-3">Ajustá tu plan</h4>
+      <label class="flex justify-between items-baseline text-sm" for="pa-daily">
+        <span>¿Cuánto pensás gastar por día?</span><b class="text-primary" id="pa-daily-label">${money(b.daily_cents)}</b></label>
+      <input type="range" id="pa-daily" class="w-full mt-2" style="accent-color:var(--primary)"
+             min="0" max="${sliderMax}" step="1000" value="${b.daily_cents}" />
+      <div class="flex justify-between muted text-xs"><span>$ 0</span><span>Tu promedio: ${money(b.usual_daily_cents)}</span></div>
+      <div class="text-sm mt-4 mb-2">Colchón por si algo varía</div>
+      <div class="segmented flex w-full" role="group" aria-label="Colchón">${CUSHIONS.map(([d, label]) => `
+        <button type="button" class="flex-1 text-center" style="padding-inline:.4rem" data-cushion="${d}" aria-pressed="${b.cushion_days === d}">${label}</button>`).join("")}</div>
+      ${adjusted ? `<button type="button" class="text-primary text-sm font-medium mt-3" data-plan-reset>Volver a mis números reales</button>` : ""}
+    </div>
+
+    <details class="card p-4 mt-4">
+      <summary class="font-display font-bold cursor-pointer">Cómo llega tu plata (el detalle)</summary>
+      <p class="muted text-xs my-3">Hoy tenés ${money(b.start_cents)}. Cada cobro y cada cuenta cuentan en su día, y todos los días restamos ${money(b.daily_cents)} de gastos.</p>
       <ul class="space-y-1.5 text-sm">${rows}
         <li class="flex items-center gap-2 pt-1.5 mt-1.5 border-t" style="border-color:var(--border)">
           <span class="muted text-xs w-14 shrink-0">${shortDate(b.covers_until)}</span>
@@ -342,9 +394,43 @@ function planBudget(plan) {
           <span class="flex-1 muted">Llegás hasta acá; el ${shortDate(b.next_pay)} volvés a cobrar</span>
         </li>
       </ul>
-      <p class="muted text-xs mt-3">Tu día más justo después de ${esc(plan.name)} es el <b>${longDate(b.lowest_date)}</b>:
-        ese día te quedarían ${money(b.cushion_cents)} de colchón (una semana de tus gastos), por si algo varía.</p>
-    </div>`;
+      <p class="muted text-xs mt-3">El colchón (${money(b.cushion_cents)}) es lo que te queda en tu día más justo, por si algo varía.</p>
+    </details>`;
+}
+
+/** El gráfico de saldo: una línea con la meta y el día más justo marcados. */
+let planChart;
+function drawPlanChart(b) {
+  planChart?.destroy();
+  const canvas = document.getElementById("plan-chart");
+  if (!canvas || !window.Chart) return;
+  const marks = { [b.deadline]: css("--accent"), [b.lowest_date]: css("--danger") };
+  const points = b.series;
+  planChart = new Chart(canvas, {
+    type: "line",
+    data: {
+      labels: points.map((p) => shortDate(p.date)),
+      datasets: [{
+        data: points.map((p) => p.balance_cents / 100),
+        borderColor: css("--primary"), borderWidth: 2, tension: 0.25, fill: true,
+        backgroundColor: css("--primary-soft"),
+        pointRadius: points.map((p) => (marks[p.date] ? 5 : 0)),
+        pointBackgroundColor: points.map((p) => marks[p.date] ?? css("--primary")),
+        pointBorderWidth: 0, pointHoverRadius: 5,
+      }],
+    },
+    options: {
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false },
+        tooltip: { callbacks: { label: (c) => money(c.raw * 100) } } },
+      scales: {
+        x: { grid: { display: false }, ticks: { maxTicksLimit: 6, color: css("--muted") } },
+        y: { beginAtZero: true, grid: { color: css("--border") }, ticks: { color: css("--muted"),
+             callback: (v) => (Math.abs(v) >= 1000 ? `$ ${Math.round(v / 1000)}k` : `$ ${v}`) } },
+      },
+      animation: { duration: 900, easing: "easeOutQuart" },
+    },
+  });
 }
 
 const stepsHTML = (steps) => `
@@ -354,15 +440,18 @@ const stepsHTML = (steps) => `
 
 // Meta con fecha cercana: presupuesto real + ideas (si falta) + pasos
 function planWithBudget(plan) {
-  const ok = plan.budget.difference_cents >= 0;
+  const b = plan.budget;
+  const ok = b.difference_cents >= 0;
   return `
     <p class="muted text-sm">Plan · ${esc(plan.name)}</p>
     ${planBudget(plan)}
     ${ok ? "" : planIdeas(plan, "Ideas para sumar más plata de acá a esa fecha")}
     ${stepsHTML([
       `Cuando cobres, separá los <b>${money(plan.remaining_cents)}</b> de ${esc(plan.name)} antes de gastar en otra cosa.`,
-      "Gastá en el día a día como siempre: el cálculo ya cuenta con eso (y con un colchón).",
-      "Seguí anotando tus gastos: si gastás más de lo habitual, este presupuesto se ajusta solo.",
+      b.max_daily_cents > 0
+        ? `En el día a día, tratá de no pasarte de <b>${money(b.max_daily_cents)} por día</b> (${money(b.max_weekly_cents)} por semana).`
+        : "Recortá todo lo que puedas en el día a día hasta esa fecha.",
+      "Seguí anotando tus gastos (y marcá como <b>puntual</b> lo que no es habitual): el plan se ajusta solo.",
     ])}
     <button class="btn btn-ghost w-full mt-6" data-close>Cerrar</button>`;
 }
@@ -403,29 +492,47 @@ function planHTML(plan) {
 
 let planSheet;
 let planGoal = null;
-async function openPlanSheet(goal) {
+let planParams = {};  // ajustes del usuario: { daily_cents, cushion_days }
+async function openPlanSheet(goal, params = {}) {
   planGoal = goal;
+  planParams = params;
   planSheet ??= createSheet(`<div id="plan-body" class="min-h-40"></div>`, { label: "Plan de la meta" });
   if (!planSheet.ready) {
     planSheet.ready = true;
     planSheet.el.addEventListener("click", async (e) => {
       const btn = e.target.closest("[data-set-contribution]");
+      const cushion = e.target.closest("[data-cushion]");
+      if (cushion) return openPlanSheet(planGoal, { ...planParams, cushion_days: Number(cushion.dataset.cushion) });
+      if (e.target.closest("[data-plan-reset]")) return openPlanSheet(planGoal, {});
       if (!btn) return;
       btn.disabled = true;
       await api(`/api/goals/${planGoal.id}`, { method: "PATCH", body: { monthly_contribution_cents: Number(btn.dataset.setContribution) } });
       toast(`Aporte fijo para ${planGoal.name}`);
       notifyDataChanged();
-      openPlanSheet(planGoal);  // redibuja el plan con el aporte nuevo
+      openPlanSheet(planGoal, planParams);  // redibuja el plan con el aporte nuevo
+    });
+    // Deslizador: mientras lo movés cambia el número; al soltarlo, se recalcula
+    planSheet.el.addEventListener("input", (e) => {
+      if (e.target.id === "pa-daily") planSheet.el.querySelector("#pa-daily-label").textContent = money(Number(e.target.value));
+    });
+    planSheet.el.addEventListener("change", (e) => {
+      if (e.target.id === "pa-daily") openPlanSheet(planGoal, { ...planParams, daily_cents: Number(e.target.value) });
     });
   }
   const body = planSheet.el.querySelector("#plan-body");
-  if (!planSheet.el.classList.contains("sheet-open")) body.innerHTML = `<p class="muted text-sm">Armando tu plan…</p>`;
+  const box = planSheet.el.querySelector(".sheet");
+  const reopening = planSheet.el.classList.contains("sheet-open");
+  const scroll = box.scrollTop;  // al recalcular, que no salte arriba de todo
+  if (!reopening) body.innerHTML = `<p class="muted text-sm">Armando tu plan…</p>`;
   planSheet.open();
-  const plan = await api(`/api/finance/goals/${goal.id}/plan`);
+  const query = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null)).toString();
+  const plan = await api(`/api/finance/goals/${goal.id}/plan${query ? `?${query}` : ""}`);
   body.innerHTML = planHTML(plan);
+  if (reopening) box.scrollTop = scroll;
   icons();
   fillBars(body);
   countUp(body.querySelector("#plan-monthly"), plan.budget ? plan.budget.budget_cents : plan.monthly_cents);
+  if (plan.budget) drawPlanChart(plan.budget);
 }
 
 function init() {

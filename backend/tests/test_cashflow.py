@@ -152,3 +152,93 @@ def test_sin_fecha_o_muy_lejos_no_hay_presupuesto():
     assert goal_budget(data, viaje, HOY, RATE) is None
     viaje.deadline = dt.date(2029, 1, 1)
     assert goal_budget(data, viaje, HOY, RATE) is None
+
+
+# --- Gastos puntuales, ajustes y tope por día ---------------------------------
+
+def puntual(monto, fecha):
+    return Expense(id=None, user_id=1, category="clothing", amount_cents=monto, kind="one_off", date=fecha)
+
+
+def test_un_gasto_puntual_no_infla_el_promedio():
+    data = datos()
+    antes = finance.average_variable_expenses(data, HOY, RATE)
+    data.expenses.append(puntual(4_000_000, dt.date(2026, 10, 20)))   # una campera de $ 40.000
+    assert finance.average_variable_expenses(data, HOY, RATE) == antes
+    # …pero sí cuenta como gasto de octubre
+    assert finance.month_summary(data, 2026, 10, RATE).variable_expenses_cents == 900_000 + 4_000_000
+
+
+def test_un_puntual_a_futuro_entra_en_la_simulacion():
+    data, viaje = caso_viaje()
+    sin = goal_budget(data, viaje, dt.date(2026, 11, 2), RATE)
+    data.expenses.append(puntual(200_000, dt.date(2026, 11, 20)))     # cumpleaños el 20/11
+    con = goal_budget(data, viaje, dt.date(2026, 11, 2), RATE)
+    assert sin.max_cents - con.max_cents == 200_000
+    assert any(s.kind == "one_off" and s.date == dt.date(2026, 11, 20) for s in con.steps)
+    # y en el mes proyectado también aparece
+    assert finance.month_summary(data, 2026, 11, RATE, projected_variable_cents=0).variable_expenses_cents == 200_000
+
+
+def test_gastar_menos_por_dia_agranda_el_presupuesto():
+    data, viaje = caso_viaje()
+    normal = goal_budget(data, viaje, dt.date(2026, 11, 2), RATE)
+    ajustado = goal_budget(data, viaje, dt.date(2026, 11, 2), RATE, daily_cents=10_000, cushion_days=0)
+    assert ajustado.daily_cents == 10_000 and ajustado.cushion_cents == 0
+    assert ajustado.max_cents > normal.max_cents
+    assert ajustado.usual_daily_cents == normal.usual_daily_cents   # el promedio real no cambia
+
+
+def test_tope_por_dia_para_llegar():
+    data, viaje = caso_viaje()
+    hoy = dt.date(2026, 11, 2)
+    b = goal_budget(data, viaje, hoy, RATE)
+    assert b.max_daily_cents > b.usual_daily_cents      # le sobra: puede gastar más que su promedio
+    assert b.max_weekly_cents == b.max_daily_cents * 7
+    # Gastando justo el tope (y sin colchón extra) todavía paga el viaje y le queda el colchón
+    justo = goal_budget(data, viaje, hoy, RATE, daily_cents=b.max_daily_cents, cushion_days=0)
+    assert justo.max_cents >= 1_500_000 + b.cushion_cents - 100
+    # Un poco más por día y ya no llega con colchón
+    pasado = goal_budget(data, viaje, hoy, RATE, daily_cents=b.max_daily_cents + 5_000, cushion_days=0)
+    assert pasado.max_cents < 1_500_000 + b.cushion_cents
+
+
+def test_serie_para_el_grafico():
+    data, viaje = caso_viaje()
+    b = goal_budget(data, viaje, dt.date(2026, 11, 2), RATE)
+    assert b.series[0].date == dt.date(2026, 11, 2) and b.series[0].balance_cents == b.start_cents
+    assert b.series[-1].date == b.covers_until
+    assert b.goal_spend_cents == 1_500_000                  # le alcanza: el gráfico resta lo que cuesta
+    dia_mas_justo = next(p for p in b.series if p.date == b.lowest_date)
+    assert dia_mas_justo.balance_cents == b.lowest_cents
+
+
+def test_detecta_gasto_inusual():
+    comida = [Expense(id=i, user_id=1, category="food", amount_cents=50_000, kind="variable",
+                      date=dt.date(2026, 11, i)) for i in range(1, 5)]
+    data = finance.FinanceData(expenses=comida)
+    grande = Expense(id=99, user_id=1, category="food", amount_cents=500_000, kind="variable", date=HOY)
+    normal = Expense(id=98, user_id=1, category="food", amount_cents=120_000, kind="variable", date=HOY)
+    assert finance.unusual_expense(data, grande, RATE).unusual
+    check = finance.unusual_expense(data, normal, RATE)
+    assert not check.unusual and check.typical_cents == 50_000
+
+
+def test_api_ajustes_y_gasto_inusual(client, make_user):
+    ana = make_user("ana@example.com")
+    beto = make_user("beto@example.com")
+    client.post("/api/incomes", json={"source": "Sueldo", "amount_cents": 5_000_000, "start_date": "2025-01-01"},
+                headers=ana)
+    m = client.get("/api/finance/money?daily_cents=10000", headers=ana).json()
+    assert m["usual_spending_cents"] == 10_000 * m["days_left"]
+    gasto = client.post("/api/expenses", json={"category": "food", "amount_cents": 5_000}, headers=ana).json()
+    assert client.get(f"/api/finance/unusual/{gasto['id']}", headers=ana).json()["unusual"] is False
+    assert client.get(f"/api/finance/unusual/{gasto['id']}", headers=beto).status_code == 404
+    puntual = client.post("/api/expenses", json={"category": "clothing", "amount_cents": 400_000,
+                                                 "kind": "one_off"}, headers=ana)
+    assert puntual.status_code == 201 and puntual.json()["kind"] == "one_off"
+    meta = client.post("/api/goals", json={"name": "Viaje", "target_cents": 100_000,
+                                           "deadline": (dt.date.today() + dt.timedelta(days=40)).isoformat()},
+                       headers=ana).json()
+    plan = client.get(f"/api/finance/goals/{meta['id']}/plan?daily_cents=0&cushion_days=0", headers=ana).json()
+    assert plan["budget"]["daily_cents"] == 0 and plan["budget"]["cushion_days"] == 0

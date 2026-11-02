@@ -83,6 +83,7 @@ function renderMoney() {
         <div class="rounded-xl p-4 ${short ? "bg-danger-soft" : "bg-primary-soft"}">
           <div class="muted text-sm">${short ? "Máximo por día" : "Para gastar por día"}</div>
           <div class="font-display text-2xl font-bold ${short ? "text-danger" : "text-primary"}" id="money-daily">$ 0</div>
+          <div class="text-xs">≈ ${money(m.daily_spending_cents * 7)} por semana</div>
           <div class="muted text-xs mt-1">hasta el ${end} (${m.days_left} ${m.days_left === 1 ? "día" : "días"})${short ? "" : " · tu ritmo habitual"}</div>
         </div>
         <div class="rounded-xl p-4 bg-accent-soft">
@@ -237,7 +238,7 @@ function renderFood() {
 
 // --- Gastos de hoy ---
 async function renderToday() {
-  const items = await api(`/api/expenses?from_date=${todayISO()}&to_date=${todayISO()}&kind=variable`);
+  const items = await api(`/api/expenses?from_date=${todayISO()}&to_date=${todayISO()}&kind=variable&kind=one_off`);
   const total = items.reduce((s, e) => s + e.amount_cents * (e.currency === "USD" ? e.exchange_rate || 0 : 1), 0);
   countUp($("today-total"), total);
   $("today-list").innerHTML = items.length ? items.slice(0, 6).map((e) => `

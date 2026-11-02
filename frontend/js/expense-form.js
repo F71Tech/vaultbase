@@ -7,7 +7,7 @@
 // =========================================================================
 
 import { api } from "./api.js";
-import { centsToInput, parseMoney, todayISO } from "./format.js";
+import { centsToInput, money, moneyExact, parseMoney, todayISO } from "./format.js";
 import { getCategories, KIND } from "./labels.js";
 import { confirmDialog, createSheet, esc, icons, notifyDataChanged, toast } from "./ui.js";
 
@@ -41,6 +41,10 @@ function template(cats) {
     <p id="ef-fixed-hint" class="text-xs rounded-xl bg-primary-soft p-2.5 mb-4 flex gap-2 items-center" hidden>
       <i data-lucide="repeat" class="w-4 h-4 text-primary shrink-0"></i>
       <span>Esto suele repetirse todos los meses: lo marcamos como <b>gasto fijo</b>. Si no, cambialo en "Tipo".</span></p>
+    <label class="flex items-start gap-2 text-sm mb-4 cursor-pointer" id="ef-oneoff-wrap">
+      <input type="checkbox" id="ef-oneoff" class="w-4 h-4 mt-0.5" style="accent-color:var(--accent)" />
+      <span>Fue algo <b>puntual</b> <span class="muted text-xs block">No lo gastás seguido (una campera, un regalo…): no cuenta para tu gasto diario promedio. Puede tener fecha futura.</span></span>
+    </label>
 
     <label class="field mb-3"><span>Descripción (opcional)</span>
       <input id="ef-description" class="input" maxlength="120" placeholder="Ej: alfajor, taxi al centro…" />
@@ -81,6 +85,9 @@ function renderSelection(cats) {
     <button type="button" class="chip" data-sub="${s.key}" aria-pressed="${s.key === state.subcategory}">
       ${esc(s.label)}</button>`).join("");
   $("#ef-end-wrap").hidden = $("#ef-kind").value !== "fixed";
+  // La casilla "puntual" y el select "Tipo" muestran lo mismo
+  $("#ef-oneoff").checked = $("#ef-kind").value === "one_off";
+  $("#ef-oneoff-wrap").hidden = $("#ef-kind").value === "fixed";
 }
 
 // Gastos que casi siempre se repiten igual cada mes. Si alguien los carga con
@@ -93,7 +100,9 @@ const USUALLY_FIXED = new Set([
 function suggestFixed() {
   const fixed = !editing && USUALLY_FIXED.has(state.subcategory);
   if (!editing) {
-    $("#ef-kind").value = fixed ? "fixed" : openedKind;  // vuelve al tipo con el que se abrió
+    // Si no es "fijo": respeta "puntual" si ya lo marcó; si no, vuelve al tipo con el que se abrió
+    const oneOff = $("#ef-kind").value === "one_off";
+    $("#ef-kind").value = fixed ? "fixed" : oneOff ? "one_off" : openedKind;
     if (fixed) $("#ef-advanced").hidden = false;  // para que vea el tipo y pueda cambiarlo
   }
   $("#ef-fixed-hint").hidden = !fixed;
@@ -118,6 +127,11 @@ async function ensureSheet() {
     if (cat || sub || cur) renderSelection(cats);
   });
   $("#ef-kind").addEventListener("change", () => renderSelection(cats));
+  $("#ef-oneoff").addEventListener("change", () => {
+    $("#ef-kind").value = $("#ef-oneoff").checked ? "one_off" : "variable";
+    if ($("#ef-oneoff").checked) $("#ef-advanced").hidden = false;  // para poder elegir la fecha (puede ser futura)
+    renderSelection(cats);
+  });
   $("#ef-more").addEventListener("click", () => { $("#ef-advanced").hidden = !$("#ef-advanced").hidden; });
   $("#ef-delete").addEventListener("click", onDelete);
   $("#expense-form").addEventListener("submit", (e) => { e.preventDefault(); onSave(); });
@@ -151,8 +165,13 @@ async function onSave() {
       await api(`/api/expenses/${editing.id}`, { method: "PATCH", body });
       toast("Gasto actualizado");
     } else {
-      await api("/api/expenses", { method: "POST", body });
+      const created = await api("/api/expenses", { method: "POST", body });
       toast("Gasto guardado");
+      sheet.close();
+      notifyDataChanged();
+      // ¿Es mucho más de lo que solés gastar? Preguntamos si fue algo puntual
+      if (created.kind === "variable") askIfOneOff(created);
+      return;
     }
     sheet.close();
     notifyDataChanged();
@@ -161,6 +180,38 @@ async function onSave() {
   } finally {
     btn.disabled = false;
   }
+}
+
+// Pregunta "¿fue algo puntual?" cuando un gasto del día a día es mucho más
+// grande de lo habitual (el backend compara con tus gastos de esa categoría)
+async function askIfOneOff(expense) {
+  let check;
+  try { check = await api(`/api/finance/unusual/${expense.id}`); } catch { return; }
+  if (!check.unusual) return;
+  const typical = check.typical_cents ? ` En esta categoría solés gastar unos <b>${money(check.typical_cents)}</b>.` : "";
+  const ask = createSheet(`
+    <div class="flex gap-3 items-start mb-4">
+      <span class="icon-badge bg-accent-soft text-accent shrink-0"><i data-lucide="sparkles"></i></span>
+      <div>
+        <h3 class="font-display text-lg font-bold">¿Fue algo puntual?</h3>
+        <p class="muted text-sm mt-1">${moneyExact(expense.amount_cents, expense.currency)} es bastante más que lo habitual.${typical}
+          Si fue algo de una vez, lo marcamos como <b>puntual</b> para que no te infle el gasto diario de los cálculos.</p>
+      </div>
+    </div>
+    <div class="flex gap-3">
+      <button class="btn btn-ghost flex-1" data-close data-answer="no">No, es normal</button>
+      <button class="btn btn-primary flex-1" data-close data-answer="yes">Sí, fue puntual</button>
+    </div>`, { label: "¿Fue algo puntual?" });
+  ask.el.addEventListener("click", async (e) => {
+    const answer = e.target.closest("[data-answer]")?.dataset.answer;
+    if (!answer && !e.target.classList.contains("sheet-backdrop")) return;
+    setTimeout(() => ask.el.remove(), 400);
+    if (answer !== "yes") return;
+    await api(`/api/expenses/${expense.id}`, { method: "PATCH", body: { kind: "one_off" } });
+    toast("Marcado como puntual");
+    notifyDataChanged();
+  });
+  ask.open();
 }
 
 async function onDelete() {

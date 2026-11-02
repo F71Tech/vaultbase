@@ -85,7 +85,8 @@ def list_expenses(
     to_date: Annotated[dt.date | None, Query(description="Hasta (incluida)")] = None,
     category: ExpenseCategory | None = None,
     subcategory: str | None = None,
-    kind: ExpenseKind | None = None,
+    # Se puede repetir: ?kind=variable&kind=one_off trae los dos tipos
+    kind: Annotated[list[ExpenseKind] | None, Query(description="Tipo(s) de gasto")] = None,
     limit: Annotated[int, Query(ge=1, le=1000)] = 500,
     offset: Annotated[int, Query(ge=0)] = 0,
 ):
@@ -101,6 +102,6 @@ def list_expenses(
     if subcategory:
         stmt = stmt.where(Expense.subcategory == subcategory)
     if kind:
-        stmt = stmt.where(Expense.kind == kind)
+        stmt = stmt.where(Expense.kind.in_(kind))
     stmt = stmt.order_by(Expense.date.desc(), Expense.id.desc()).offset(offset).limit(limit)
     return session.exec(stmt).all()

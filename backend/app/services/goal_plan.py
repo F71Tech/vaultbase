@@ -152,7 +152,11 @@ def build_milestones(
 
 # --- El plan ----------------------------------------------------------------
 
-def goal_plan(data: finance.FinanceData, goal: Goal, today: dt.date, rate: float | None) -> GoalPlan:
+def goal_plan(
+    data: finance.FinanceData, goal: Goal, today: dt.date, rate: float | None,
+    daily_cents: int | None = None, cushion_days: int | None = None,
+) -> GoalPlan:
+    """daily_cents y cushion_days: los ajustes del usuario para el presupuesto real."""
     capacity = finance.savings_capacity(data, today, rate)
     projections = {p.goal_id: p for p in finance.project_goals(data.goals, capacity.monthly_savings_cents, today)}
     p = projections[goal.id]
@@ -192,7 +196,7 @@ def goal_plan(data: finance.FinanceData, goal: Goal, today: dt.date, rate: float
         current_finish_month=p.estimated_date.month if p.estimated_date and remaining else None,
         milestones=build_milestones(data, goal, monthly, months, today, rate) if remaining else [],
         tips=tips,
-        budget=cashflow.goal_budget(data, goal, today, rate) if remaining else None,
+        budget=cashflow.goal_budget(data, goal, today, rate, daily_cents, cushion_days) if remaining else None,
     )
 
 

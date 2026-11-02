@@ -132,6 +132,20 @@ def overview(session: SessionDep, user: CurrentUser):
         raise _rate_error()
 
 
+# Ajustes que el usuario puede tocar en pantalla (deslizadores)
+DailyParam = Annotated[int | None, Query(ge=0, le=100_000_000, description="Cuánto pensás gastar por día, en centésimos")]
+CushionParam = Annotated[int | None, Query(ge=0, le=31, description="Días de gastos que dejar de colchón")]
+
+
+@router.get("/finance/money", response_model=cashflow.MoneyNow)
+def money(session: SessionDep, user: CurrentUser, daily_cents: DailyParam = None):
+    """Tu plata hoy y hasta tu próximo cobro (con el gasto por día que elijas)."""
+    try:
+        return cashflow.money_now(_load_data(session, user), today_uy(), _usd_rate(session), daily_cents)
+    except finance.RateMissing:
+        raise _rate_error()
+
+
 @router.get("/finance/food-budget", response_model=finance.FoodBudget)
 def food_budget(session: SessionDep, user: CurrentUser):
     """Presupuesto de comida del mes, dividido por semanas."""
@@ -158,15 +172,28 @@ def goals(session: SessionDep, user: CurrentUser):
     return finance.project_goals(data.goals, capacity.monthly_savings_cents, today)
 
 
+@router.get("/finance/unusual/{expense_id}", response_model=finance.UnusualCheck)
+def unusual(expense_id: int, session: SessionDep, user: CurrentUser):
+    """¿Este gasto es mucho más grande de lo habitual? (para preguntar si fue puntual)"""
+    data = _load_data(session, user)
+    expense = next((e for e in data.expenses if e.id == expense_id), None)
+    if expense is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Gasto no encontrado")
+    return finance.unusual_expense(data, expense, _usd_rate(session))
+
+
 @router.get("/finance/goals/{goal_id}/plan", response_model=goal_plan.GoalPlan)
-def plan(goal_id: int, session: SessionDep, user: CurrentUser):
+def plan(
+    goal_id: int, session: SessionDep, user: CurrentUser,
+    daily_cents: DailyParam = None, cushion_days: CushionParam = None,
+):
     """Plan para llegar a una meta: aporte por mes, hitos y qué ajustar si no alcanza."""
     data = _load_data(session, user)
     goal = next((g for g in data.goals if g.id == goal_id), None)
     if goal is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Meta no encontrada")
     try:
-        return goal_plan.goal_plan(data, goal, today_uy(), _usd_rate(session))
+        return goal_plan.goal_plan(data, goal, today_uy(), _usd_rate(session), daily_cents, cushion_days)
     except finance.RateMissing:
         raise _rate_error()
 

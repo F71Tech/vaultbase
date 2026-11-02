@@ -2,8 +2,12 @@
 Gastos.
 
 - Fijo (fixed): se repite todos los meses desde `date` (alquiler, UTE, internet).
-- Variable (variable): ocurre una vez, el día `date` (el súper, un taxi, una salida).
-  Los gastos del día a día ("hoy me compré un alfajor") son variables.
+- Variable (variable): los gastos del día a día ("hoy me compré un alfajor",
+  el súper, un taxi). Con ellos se calcula "lo que solés gastar por día".
+- Puntual (one_off): algo que pasa una vez y no es habitual (una campera, un
+  regalo, un arreglo). Cuenta el día que ocurre, pero NO entra en el promedio,
+  así un gasto grande y raro no te "infla" el gasto diario. Puede tener fecha
+  futura ("el 20 tengo un cumpleaños"): la simulación lo descuenta ese día.
 
 Cada gasto tiene una categoría principal (ej: food) y, opcionalmente, una
 subcategoría (ej: snacks). El árbol completo está en categories.py.
@@ -50,6 +54,7 @@ def check_subcategory(category, subcategory) -> None:
 class ExpenseKind(str, Enum):
     fixed = "fixed"
     variable = "variable"
+    one_off = "one_off"   # puntual (no tiene el CHECK de la base: se guarda como texto)
 
 
 class ExpenseBase(SQLModel):

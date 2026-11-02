@@ -169,6 +169,7 @@ def month_summary(
 
     fixed = 0
     variable = 0
+    one_off = 0
     by_category: dict[str, int] = {}
     for expense in data.expenses:
         amount = expense_in_month(expense, year, month, rate)
@@ -176,10 +177,12 @@ def month_summary(
             continue
         if expense.kind == ExpenseKind.fixed:
             fixed += amount
+        elif expense.kind == ExpenseKind.one_off:
+            one_off += amount  # puntual: cuenta siempre, también si ya está anotado a futuro
         elif projected_variable_cents is None:
             variable += amount
         else:
-            continue  # mes futuro: los variables se estiman aparte
+            continue  # mes futuro: los del día a día se estiman aparte
         key = _category(expense)
         by_category[key] = by_category.get(key, 0) + amount
 
@@ -188,6 +191,7 @@ def month_summary(
         variable = projected_variable_cents
         if variable:
             by_category[VARIABLE_ESTIMATE_KEY] = variable
+    variable += one_off  # en el resumen, los puntuales van junto a los variables
     if subs:
         by_category[SUBSCRIPTIONS_KEY] = subs
 
@@ -209,6 +213,7 @@ def average_variable_expenses(data: FinanceData, today: dt.date, rate: float | N
     Solo cuenta meses desde que el usuario empezó a cargar gastos (si empezó
     este mes, los meses anteriores en 0 bajarían el promedio sin razón).
     Si no hay ningún mes completo con datos, usa lo gastado en el mes actual.
+    Los gastos PUNTUALES no entran: no son "lo que solés gastar".
     """
     variables = [e for e in data.expenses if e.kind == ExpenseKind.variable]
     if not variables:
@@ -223,6 +228,41 @@ def average_variable_expenses(data: FinanceData, today: dt.date, rate: float | N
     if totals:
         return round(sum(totals) / len(totals))
     return sum(expense_in_month(e, today.year, today.month, rate) for e in variables)
+
+
+class UnusualCheck(BaseModel):
+    unusual: bool
+    typical_cents: int | None   # lo que solés gastar en esa categoría (la mediana)
+
+
+UNUSUAL_FACTOR = 3            # "inusual" = más del triple de lo habitual…
+UNUSUAL_MIN_CENTS = 100_000   # …y al menos $ 1.000 (un alfajor caro no es "puntual")
+
+
+def unusual_expense(data: FinanceData, expense: Expense, rate: float | None) -> UnusualCheck:
+    """
+    ¿Este gasto del día a día parece algo puntual? Lo comparamos con la
+    MEDIANA de tus gastos de la misma categoría en los últimos 4 meses (la
+    mediana = el del medio si los ordenás; a diferencia del promedio, un gasto
+    gigante no la mueve). Si es más del triple, preguntamos.
+    """
+    if expense.kind != ExpenseKind.variable:
+        return UnusualCheck(unusual=False, typical_cents=None)
+    amount = to_uyu(expense.amount_cents, expense.currency, expense.exchange_rate or rate)
+    since = expense.date - dt.timedelta(days=120)
+    peers = sorted(
+        to_uyu(e.amount_cents, e.currency, e.exchange_rate or rate) for e in data.expenses
+        if e.id != expense.id and e.kind == ExpenseKind.variable
+        and _category(e) == _category(expense) and since <= e.date <= expense.date
+    )
+    if len(peers) >= 3:
+        typical = peers[len(peers) // 2]
+        return UnusualCheck(unusual=amount >= UNUSUAL_MIN_CENTS and amount > typical * UNUSUAL_FACTOR,
+                            typical_cents=typical)
+    # Pocos datos de esa categoría: lo comparamos con todo tu gasto mensual del día a día
+    monthly = average_variable_expenses(data, expense.date, rate)
+    return UnusualCheck(unusual=amount >= max(UNUSUAL_MIN_CENTS * 2, monthly // 4) if monthly else False,
+                        typical_cents=None)
 
 
 class SavingsCapacity(BaseModel):
@@ -327,7 +367,7 @@ def food_budget(
 
     food = [
         e for e in data.expenses
-        if _category(e) == FOOD_CATEGORY and e.kind == ExpenseKind.variable
+        if _category(e) == FOOD_CATEGORY and e.kind != ExpenseKind.fixed  # día a día + puntuales
         and first <= e.date <= last
     ]
     by_sub: dict[str, int] = {}
