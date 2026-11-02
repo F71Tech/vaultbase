@@ -24,6 +24,17 @@ def test_reemplaza_cdn_por_css_compilado(tmp_path, monkeypatch):
     assert build.LINK_TAG in page.read_text(encoding="utf-8")
 
 
+def test_el_compilador_se_llama_con_ruta_absoluta(tmp_path, monkeypatch):
+    # Bug real del primer deploy: "./tailwindcss" se buscaba dentro de frontend/
+    llamadas = []
+    monkeypatch.setattr(build, "FRONTEND", tmp_path)
+    monkeypatch.setattr(build.subprocess, "run", lambda args, **kw: llamadas.append((args, kw)))
+    build.compile_tailwind("./tailwindcss")
+    args, kw = llamadas[0]
+    assert Path(args[0]).is_absolute()
+    assert kw["cwd"] == tmp_path
+
+
 def test_si_no_hay_compilador_no_toca_nada(tmp_path, monkeypatch):
     monkeypatch.setattr(build, "FRONTEND", tmp_path)
     assert build.compile_tailwind(str(tmp_path / "no-existe")) is False

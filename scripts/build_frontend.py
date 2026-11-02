@@ -24,6 +24,9 @@ LINK_TAG = '<link rel="stylesheet" href="/css/tailwind.css" />'
 
 def compile_tailwind(binary: str) -> bool:
     output = FRONTEND / "css" / "tailwind.css"
+    # Ruta ABSOLUTA: el compilador corre "parado" en frontend/, y una ruta
+    # relativa como "./tailwindcss" se buscaría ahí (frontend/tailwindcss).
+    binary = str(Path(binary).resolve())
     try:
         subprocess.run(
             [binary, "-i", str(FRONTEND / "css" / "tailwind.src.css"), "-o", str(output), "--minify"],
