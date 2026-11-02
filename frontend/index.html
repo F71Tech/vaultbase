@@ -41,8 +41,9 @@
         </p>
         <div class="rise flex flex-wrap gap-3 mt-8" style="animation-delay:.24s">
           <a href="/login.html?mode=register" class="btn btn-primary">Crear cuenta gratis <i data-lucide="arrow-right" class="w-4 h-4"></i></a>
-          <a href="/login.html" class="btn btn-ghost">Ya tengo cuenta</a>
+          <button class="btn btn-ghost" id="demo-btn"><i data-lucide="play" class="w-4 h-4"></i>Probar la demo</button>
         </div>
+        <p class="rise muted text-sm mt-3" style="animation-delay:.28s">La demo trae datos de ejemplo y no pide registro. ¿Ya tenés cuenta? <a href="/login.html" class="text-primary font-medium">Ingresá</a>.</p>
       </div>
 
       <div class="rise grid grid-cols-2 gap-3" style="animation-delay:.3s">
@@ -65,5 +66,14 @@
     <footer class="muted text-sm py-10 text-center">VaultBase · proyecto de portfolio</footer>
   </div>
   <script>lucide.createIcons();</script>
+  <script type="module">
+    import { startDemo } from "/js/api.js";
+    const btn = document.getElementById("demo-btn");
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      btn.lastChild.textContent = "Preparando la demo…";
+      try { await startDemo(); } catch { btn.disabled = false; btn.lastChild.textContent = "Probar la demo"; }
+    });
+  </script>
 </body>
 </html>

@@ -74,6 +74,16 @@ export async function api(path, { method = "GET", body, form } = {}) {
   return data;
 }
 
+/** Crea una cuenta demo nueva (con datos de ejemplo) y entra al dashboard. */
+export async function startDemo() {
+  const { access_token } = await api("/api/auth/demo", { method: "POST" });
+  auth.save(access_token);
+  location.href = "/dashboard.html";
+}
+
+export const DEMO_DOMAIN = "demo.vaultbase.app";
+export const isDemoEmail = (email) => email?.endsWith(`@${DEMO_DOMAIN}`);
+
 // Si no hay sesión, manda al login. Se llama al principio de cada pantalla privada.
 export function requireLogin() {
   if (!auth.loggedIn) {

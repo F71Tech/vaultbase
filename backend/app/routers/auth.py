@@ -9,6 +9,7 @@ from sqlmodel import select
 from ..deps import SessionDep
 from ..models import Token, User, UserCreate, UserRead
 from ..security import DUMMY_HASH, create_access_token, hash_password, verify_password
+from ..services.demo import create_demo_user
 
 router = APIRouter(prefix="/api/auth", tags=["Autenticación"])
 
@@ -52,4 +53,14 @@ def login(form: Annotated[OAuth2PasswordRequestForm, Depends()], session: Sessio
             "Email o contraseña incorrectos",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    return Token(access_token=create_access_token(user.id))
+
+
+@router.post("/demo", response_model=Token)
+def demo(session: SessionDep):
+    """
+    Crea una cuenta demo con datos de ejemplo y devuelve su token.
+    Cada visitante recibe su propia demo; se borran solas a las pocas horas.
+    """
+    user = create_demo_user(session)
     return Token(access_token=create_access_token(user.id))

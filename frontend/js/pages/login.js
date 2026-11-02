@@ -1,6 +1,6 @@
 // login.js · Pantalla de ingreso y registro.
 
-import { api, auth } from "../api.js";
+import { api, auth, startDemo } from "../api.js";
 import { icons } from "../ui.js";
 
 const form = document.getElementById("auth-form");
@@ -66,6 +66,18 @@ document.getElementById("toggle-pass").addEventListener("click", () => {
   form.password.type = form.password.type === "password" ? "text" : "password";
 });
 form.addEventListener("submit", onSubmit);
+const demoBtn = document.getElementById("demo-btn");
+demoBtn.addEventListener("click", async () => {
+  demoBtn.disabled = true;
+  demoBtn.lastChild.textContent = "Preparando la demo…";
+  try {
+    await startDemo();
+  } catch (err) {
+    errorEl.textContent = err.message;
+    demoBtn.disabled = false;
+    demoBtn.lastChild.textContent = "Probar la demo sin registrarme";
+  }
+});
 
 if (auth.loggedIn) location.replace(nextPage());
 setMode(mode);

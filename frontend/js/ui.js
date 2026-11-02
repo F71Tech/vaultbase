@@ -124,6 +124,14 @@ export function confirmDialog(message, { confirmText = "Borrar" } = {}) {
   });
 }
 
+// --- Red de seguridad para errores ---
+// Si algún pedido falla y nadie lo atrapó (ej: se cayó la conexión), en vez de
+// que no pase nada en pantalla, mostramos el mensaje en un aviso rojo.
+window.addEventListener("unhandledrejection", (event) => {
+  const message = event.reason?.message;
+  if (message && event.reason?.status !== 401) toast(message, "error");
+});
+
 // --- Brillo que sigue al mouse en las tarjetas ---
 // Guardamos la posición del mouse dentro de la tarjeta en variables CSS
 // (--mx, --my) y el CSS dibuja ahí un degradado suave.
