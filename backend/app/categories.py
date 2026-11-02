@@ -142,6 +142,36 @@ CATEGORY_TREE: dict[str, dict] = {
 }
 
 
+# Gastos "recortables": los que dependen de decisiones del día a día.
+# El plan de metas SOLO sugiere recortar acá. Alquiler, gastos comunes, luz,
+# mutualista, supermercado, etc. no se recortan con fuerza de voluntad.
+# - Un set de subcategorías: solo esas son recortables.
+# - "*": toda la categoría (incluso los gastos sin subcategoría).
+DISCRETIONARY: dict[str, set[str] | str] = {
+    "food": {"eating_out", "delivery", "snacks"},
+    "transport": {"taxi_apps"},
+    "housing": {"furniture"},
+    "leisure": "*",
+    "clothing": "*",
+    "tech": {"devices", "tech_accessories"},
+    "gifts": {"presents"},
+}
+
+
+def is_discretionary(category: str, subcategory: str | None) -> bool:
+    """¿Es un gasto que se puede recortar? (Ver DISCRETIONARY arriba.)"""
+    key = getattr(category, "value", category)
+    rule = DISCRETIONARY.get(key)
+    return rule == "*" or (rule is not None and subcategory in rule)
+
+
+def spending_label(category: str, subcategory: str | None) -> str:
+    """El nombre más concreto: "Delivery" mejor que "Comida"."""
+    key = getattr(category, "value", category)
+    cat = CATEGORY_TREE.get(key, {})
+    return cat.get("subcategories", {}).get(subcategory) or cat.get("label", key)
+
+
 def is_valid_subcategory(category: str, subcategory: str | None) -> bool:
     """Una subcategoría es válida si está vacía o pertenece a esa categoría."""
     if subcategory is None:

@@ -13,6 +13,7 @@ import { confirmDialog, createSheet, esc, icons, notifyDataChanged, toast } from
 
 let sheet;          // la hoja se crea una sola vez y se reutiliza
 let editing = null; // gasto que se está editando (null = gasto nuevo)
+let openedKind = "variable"; // con qué tipo se abrió la hoja ("+" = variable)
 const state = { category: "food", subcategory: null, currency: "UYU", kind: "variable" };
 
 function template(cats) {
@@ -37,6 +38,9 @@ function template(cats) {
 
     <div class="grid grid-cols-4 sm:grid-cols-5 gap-2 mb-3">${catButtons}</div>
     <div id="ef-subs" class="flex flex-wrap gap-2 mb-4"></div>
+    <p id="ef-fixed-hint" class="text-xs rounded-xl bg-primary-soft p-2.5 mb-4 flex gap-2 items-center" hidden>
+      <i data-lucide="repeat" class="w-4 h-4 text-primary shrink-0"></i>
+      <span>Esto suele repetirse todos los meses: lo marcamos como <b>gasto fijo</b>. Si no, cambialo en "Tipo".</span></p>
 
     <label class="field mb-3"><span>Descripción (opcional)</span>
       <input id="ef-description" class="input" maxlength="120" placeholder="Ej: alfajor, taxi al centro…" />
@@ -79,6 +83,22 @@ function renderSelection(cats) {
   $("#ef-end-wrap").hidden = $("#ef-kind").value !== "fixed";
 }
 
+// Gastos que casi siempre se repiten igual cada mes. Si alguien los carga con
+// el "+" (que por defecto anota un gasto del día), los pasamos a "fijo": así
+// cuentan todos los meses y el plan de metas no sugiere recortarlos.
+const USUALLY_FIXED = new Set([
+  "rent", "common_fees", "electricity", "water", "internet_phone", "gas", "health_plan", "tuition",
+]);
+
+function suggestFixed() {
+  const fixed = !editing && USUALLY_FIXED.has(state.subcategory);
+  if (!editing) {
+    $("#ef-kind").value = fixed ? "fixed" : openedKind;  // vuelve al tipo con el que se abrió
+    if (fixed) $("#ef-advanced").hidden = false;  // para que vea el tipo y pueda cambiarlo
+  }
+  $("#ef-fixed-hint").hidden = !fixed;
+}
+
 async function ensureSheet() {
   if (sheet) return;
   const cats = await getCategories();
@@ -90,7 +110,10 @@ async function ensureSheet() {
     const sub = e.target.closest("[data-sub]");
     const cur = e.target.closest("[data-currency]");
     if (cat) { state.category = cat.dataset.cat; state.subcategory = null; }
-    if (sub) { state.subcategory = state.subcategory === sub.dataset.sub ? null : sub.dataset.sub; }
+    if (sub) {
+      state.subcategory = state.subcategory === sub.dataset.sub ? null : sub.dataset.sub;
+      suggestFixed();
+    }
     if (cur) { state.currency = cur.dataset.currency; }
     if (cat || sub || cur) renderSelection(cats);
   });
@@ -156,6 +179,7 @@ async function onDelete() {
 export async function openExpenseSheet(expense = null, { kind = "variable" } = {}) {
   await ensureSheet();
   editing = expense;
+  openedKind = kind;
   const e = expense ?? {};
   state.category = e.category ?? "food";
   state.subcategory = e.subcategory ?? null;
@@ -170,6 +194,7 @@ export async function openExpenseSheet(expense = null, { kind = "variable" } = {
   $("#ef-end").value = e.end_date ?? "";
   $("#ef-advanced").hidden = !(expense || kind === "fixed");
   $("#ef-delete").hidden = !expense;
+  $("#ef-fixed-hint").hidden = true;
   $("#ef-error").textContent = "";
   sheet.render();
   icons();

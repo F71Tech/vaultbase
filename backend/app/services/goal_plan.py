@@ -17,7 +17,7 @@ import math
 
 from pydantic import BaseModel
 
-from ..categories import CATEGORY_TREE
+from ..categories import is_discretionary, spending_label
 from ..models import ExpenseKind, Goal
 from . import finance
 
@@ -86,12 +86,17 @@ def money(cents: int) -> str:
     return "$ " + f"{math.floor(cents / 100 + 0.5):,}".replace(",", ".")
 
 
-def variable_by_category(data: finance.FinanceData, today: dt.date, rate: float | None, months: int = 3) -> dict[str, int]:
+def discretionary_spending(data: finance.FinanceData, today: dt.date, rate: float | None, months: int = 3) -> dict[str, int]:
     """
-    Promedio mensual de gastos VARIABLES por categoría (últimos meses completos).
-    Mismo criterio que finance.average_variable_expenses, pero separado.
+    Promedio mensual de los gastos RECORTABLES (delivery, salidas, ropa…),
+    agrupados por su nombre más concreto. Usa los últimos meses completos,
+    con el mismo criterio que finance.average_variable_expenses.
+    Los gastos fijos y los esenciales (alquiler, luz, súper…) nunca entran.
     """
-    variables = [e for e in data.expenses if e.kind == ExpenseKind.variable]
+    variables = [
+        e for e in data.expenses
+        if e.kind == ExpenseKind.variable and is_discretionary(e.category, e.subcategory)
+    ]
     if not variables:
         return {}
     first_date = min(e.date for e in variables)
@@ -108,7 +113,7 @@ def variable_by_category(data: finance.FinanceData, today: dt.date, rate: float 
         for y, m in periods:
             amount = finance.expense_in_month(e, y, m, rate)
             if amount:
-                key = getattr(e.category, "value", e.category)
+                key = spending_label(e.category, e.subcategory)
                 totals[key] = totals.get(key, 0) + amount
     return {k: round(v / len(periods)) for k, v in totals.items()}
 
@@ -225,12 +230,11 @@ def _tips(data, goal, p, projections, capacity, monthly, months, gap, today, rat
                 detail=f"El aporte necesario baja de {money(monthly)} a {money(new_monthly)} por mes.",
             ))
 
-    # c) Recortes: dónde más gastás en variables (promedio de los últimos meses).
-    by_cat = sorted(variable_by_category(data, today, rate).items(), key=lambda kv: kv[1], reverse=True)
-    for key, avg in by_cat[:3]:
+    # c) Recortes: solo en gastos recortables, empezando por donde más gastás.
+    spending = sorted(discretionary_spending(data, today, rate).items(), key=lambda kv: kv[1], reverse=True)
+    for label, avg in spending[:3]:
         if avg <= 0:
             continue
-        label = CATEGORY_TREE.get(key, {}).get("label", key)
         pct = math.ceil(shortfall / avg * 100)
         if pct <= MAX_CUT_PCT:
             tips.append(PlanTip(
