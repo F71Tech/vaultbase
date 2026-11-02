@@ -104,7 +104,10 @@ function renderCharts() {
       plugins: {
         legend: { position: "bottom", labels: { usePointStyle: true, boxWidth: 8 } },
         tooltip: { callbacks: {
-          label: (c) => `${c.dataset.label}: ${money(c.raw * 100)}${future[c.dataIndex] ? " (estimado)" : ""}` } },
+          label: (c) => `${c.dataset.label}: ${money(c.raw * 100)}${future[c.dataIndex] ? " (estimado)" : ""}`,
+          // En junio y diciembre aclaramos cuánto es aguinaldo
+          afterLabel: (c) => (c.datasetIndex === 0 && months[c.dataIndex].aguinaldo_cents
+            ? `Incluye aguinaldo: ${money(months[c.dataIndex].aguinaldo_cents)}` : "") } },
       },
       scales: {
         x: { grid: { display: false } },

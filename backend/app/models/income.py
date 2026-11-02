@@ -25,6 +25,9 @@ class IncomeBase(SQLModel):
     start_date: dt.date = Field(default_factory=today_uy)
     # Hasta cuándo se cobra (vacío = sigue vigente)
     end_date: dt.date | None = None
+    # Solo para sueldos (los completa la calculadora de sueldo):
+    nominal_cents: int | None = Field(default=None, gt=0)   # sueldo nominal mensual
+    aguinaldo_cents: int | None = Field(default=None, ge=0)  # medio aguinaldo LÍQUIDO (junio y diciembre)
 
 
 class Income(IncomeBase, table=True):
@@ -46,7 +49,7 @@ class IncomeRead(IncomeBase):
 
 
 class IncomeUpdate(UpdateSchema):
-    nullable_fields = {"end_date"}
+    nullable_fields = {"end_date", "nominal_cents", "aguinaldo_cents"}
 
     source: str | None = Field(default=None, min_length=1, max_length=80)
     amount_cents: int | None = Field(default=None, gt=0)
@@ -54,3 +57,5 @@ class IncomeUpdate(UpdateSchema):
     frequency: IncomeFrequency | None = None
     start_date: dt.date | None = None
     end_date: dt.date | None = None
+    nominal_cents: int | None = Field(default=None, gt=0)
+    aguinaldo_cents: int | None = Field(default=None, ge=0)

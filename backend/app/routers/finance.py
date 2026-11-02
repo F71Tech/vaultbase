@@ -205,4 +205,5 @@ def simulate(body: SimulationRequest, session: SessionDep, user: CurrentUser):
         price_cents=price, monthly_savings_cents=capacity.monthly_savings_cents,
         goals=data.goals, year_balance_cents=year_summary.balance_cents,
         today=today, installments=body.installments,
+        aguinaldo=finance.next_aguinaldo(data, today, rate),
     )

@@ -48,7 +48,7 @@ function strategyCard(s, savings, index) {
       : s.negative_months ? `<span class="chip text-danger mb-2">Te deja en negativo ${s.negative_months} mes${s.negative_months > 1 ? "es" : ""}</span>` : ""}
     <h3 class="font-display font-semibold text-lg mb-4">${esc(s.label)}</h3>
     <dl class="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
-      <div><dt class="muted">Pagás por mes</dt><dd class="font-display text-xl font-bold">${money(s.monthly_payment_cents)}</dd></div>
+      <div><dt class="muted">${s.key === "wait_aguinaldo" ? "Sale de tu ahorro" : "Pagás por mes"}</dt><dd class="font-display text-xl font-bold">${money(s.monthly_payment_cents)}</dd></div>
       <div><dt class="muted">Lo tenés</dt><dd class="font-display text-xl font-bold capitalize">${purchaseText(s)}</dd></div>
       <div><dt class="muted">Total</dt><dd class="font-semibold">${money(s.total_cost_cents)}</dd></div>
       <div><dt class="muted">Costo extra</dt><dd class="font-semibold ${s.extra_cost_cents ? "text-danger" : "text-success"}">${s.extra_cost_cents ? money(s.extra_cost_cents) : "$ 0"}</dd></div>

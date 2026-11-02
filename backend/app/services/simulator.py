@@ -159,9 +159,9 @@ def _evaluate(key: str, label: str, schedule: list[int], purchase_in: int, price
     # Pagos que caen dentro de este año calendario
     months_left_in_year = 12 - today.month + 1
     paid_this_year = sum(schedule[:months_left_in_year])
-    # "Ahorrar primero" no es un gasto extra: es plata que ya era ahorro y se
-    # apartó. Lo que impacta al balance anual es la compra en sí, cuando ocurre.
-    if key == "save_first":
+    # "Ahorrar primero" y "esperar al aguinaldo" no son gastos mes a mes: lo que
+    # impacta al balance anual es la compra en sí, en el mes en que ocurre.
+    if key in ("save_first", "wait_aguinaldo"):
         paid_this_year = price_cents if purchase_in < months_left_in_year else 0
 
     total = sum(schedule)
@@ -177,9 +177,19 @@ def _evaluate(key: str, label: str, schedule: list[int], purchase_in: int, price
     )
 
 
+MONTH_NAMES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio",
+               "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
+
+
 def simulate_purchase(price_cents: int, monthly_savings_cents: int, goals: list[Goal],
                       year_balance_cents: int, today: dt.date,
-                      installments: list[InstallmentOption]) -> SimulationResult:
+                      installments: list[InstallmentOption],
+                      aguinaldo: tuple[int, int] | None = None) -> SimulationResult:
+    """
+    `aguinaldo` = (en cuántos meses se cobra el próximo, monto líquido).
+    El aguinaldo no forma parte del ahorro mensual, así que usarlo para una
+    compra no le quita nada a las metas: solo hay que esperar a cobrarlo.
+    """
     allocation = allocate_contributions(goals, monthly_savings_cents)
     baseline, _ = _months_per_goal(goals, allocation, monthly_savings_cents, [])
     common = dict(price_cents=price_cents, goals=goals, allocation=allocation,
@@ -193,6 +203,16 @@ def simulate_purchase(price_cents: int, monthly_savings_cents: int, goals: list[
         months = len(schedule)
         label = "Ahorrar primero y comprar " + ("este mes" if months == 1 else f"en {months} meses")
         strategies.append(_evaluate("save_first", label, schedule, months - 1, **common))
+
+    if aguinaldo and aguinaldo[1] > 0:
+        offset, amount = aguinaldo
+        rest = max(price_cents - amount, 0)  # lo que el aguinaldo no alcanza a cubrir
+        month = MONTH_NAMES[(today.month - 1 + offset) % 12]
+        label = f"Esperar al aguinaldo de {month}" + (" y completar con ahorro" if rest else "")
+        result = _evaluate("wait_aguinaldo", label, [0] * offset + [rest], offset, **common)
+        result.monthly_payment_cents = rest
+        result.months_committed = 1 if rest else 0
+        strategies.append(result)
 
     for option in installments:
         schedule = installment_schedule(price_cents, option.count, option.annual_rate_pct)
@@ -236,6 +256,10 @@ def _explain(best: StrategyResult, monthly_savings_cents: int) -> str:
                  else f" y atrasa tus metas como máximo {max_delay} mes(es)")
     if best.key == "cash":
         return "Te alcanza con el ahorro de este mes: pagalo al contado, sin deudas" + delay_txt + "."
+    if best.key == "wait_aguinaldo":
+        month = MONTH_NAMES[best.purchase_date.month - 1]
+        return (f"Esperá al aguinaldo de {month}: lo pagás con esa plata extra, sin cuotas ni "
+                f"tocar tu ahorro de todos los meses" + delay_txt + ".")
     if best.key == "save_first":
         return (f"Lo más sano es ahorrar primero: en {best.months_committed} mes(es) lo tenés, "
                 f"sin intereses ni meses en negativo" + delay_txt + ".")

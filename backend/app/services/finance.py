@@ -88,6 +88,27 @@ def income_in_month(income: Income, year: int, month: int, rate: float | None) -
     return round(amount * MONTHLY_FACTOR[income.frequency])
 
 
+AGUINALDO_MONTHS = (6, 12)  # se cobra en junio y en diciembre
+
+
+def aguinaldo_in_month(income: Income, year: int, month: int, rate: float | None) -> int:
+    """
+    Medio aguinaldo que cobra este sueldo en `month` (solo junio o diciembre).
+    Corresponde a lo trabajado en el semestre anterior (dic-may o jun-nov):
+    si el sueldo empezó o terminó a mitad del semestre, se cobra proporcional.
+    """
+    if month not in AGUINALDO_MONTHS or not income.aguinaldo_cents:
+        return 0
+    months_worked = 0
+    for back in range(1, 7):  # los 6 meses anteriores
+        y, m = add_months(year, month, -back)
+        first, last = month_bounds(y, m)
+        if _active_in(income.start_date, income.end_date, first, last):
+            months_worked += 1
+    amount = to_uyu(income.aguinaldo_cents, income.currency, rate)
+    return round(amount * months_worked / 6)
+
+
 def expense_in_month(expense: Expense, year: int, month: int, rate: float | None) -> int:
     first, last = month_bounds(year, month)
     # Si el gasto tiene su cotización "congelada", usamos esa; si no, la actual
@@ -123,7 +144,8 @@ class FinanceData:
 class MonthSummary(BaseModel):
     year: int
     month: int
-    income_cents: int
+    income_cents: int               # incluye el aguinaldo en junio y diciembre
+    aguinaldo_cents: int            # la parte de income_cents que es aguinaldo
     fixed_expenses_cents: int       # gastos fijos (sin suscripciones)
     subscriptions_cents: int
     variable_expenses_cents: int
@@ -141,7 +163,8 @@ def month_summary(
     Resumen de un mes. Si `projected_variable_cents` viene con valor, el mes se
     trata como FUTURO: los gastos variables reales se reemplazan por esa estimación.
     """
-    income = sum(income_in_month(i, year, month, rate) for i in data.incomes)
+    aguinaldo = sum(aguinaldo_in_month(i, year, month, rate) for i in data.incomes)
+    income = sum(income_in_month(i, year, month, rate) for i in data.incomes) + aguinaldo
     subs = sum(subscription_in_month(s, year, month, rate) for s in data.subscriptions)
 
     fixed = 0
@@ -170,7 +193,7 @@ def month_summary(
 
     total = fixed + subs + variable
     return MonthSummary(
-        year=year, month=month, income_cents=income, fixed_expenses_cents=fixed,
+        year=year, month=month, income_cents=income, aguinaldo_cents=aguinaldo, fixed_expenses_cents=fixed,
         subscriptions_cents=subs, variable_expenses_cents=variable,
         total_expenses_cents=total, balance_cents=income - total,
         by_category=by_category, projected=projected,
@@ -210,8 +233,24 @@ class SavingsCapacity(BaseModel):
     monthly_savings_cents: int        # ahorro mensual disponible
 
 
+def next_aguinaldo(data: FinanceData, today: dt.date, rate: float | None) -> tuple[int, int] | None:
+    """
+    El próximo aguinaldo: (en cuántos meses, monto líquido en pesos).
+    0 meses = se cobra este mes. None = no hay sueldos con aguinaldo.
+    """
+    for offset in range(0, 12):
+        y, m = add_months(today.year, today.month, offset)
+        amount = sum(aguinaldo_in_month(i, y, m, rate) for i in data.incomes)
+        if amount:
+            return offset, amount
+    return None
+
+
 def savings_capacity(data: FinanceData, today: dt.date, rate: float | None) -> SavingsCapacity:
-    """Cuánto puede ahorrar el usuario por mes, en promedio."""
+    """
+    Cuánto puede ahorrar el usuario por mes, en promedio.
+    (El aguinaldo NO entra acá: es un extra de junio y diciembre, no de todos los meses.)
+    """
     y, m = today.year, today.month
     recurring = sum(
         income_in_month(i, y, m, rate) for i in data.incomes
