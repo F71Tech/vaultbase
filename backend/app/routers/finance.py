@@ -16,7 +16,7 @@ from sqlmodel import Session, select
 from ..deps import CurrentUser, SessionDep
 from ..models import Currency, Expense, Goal, Income, Subscription, User, WishItem
 from ..models.common import today_uy
-from ..services import finance, goal_plan
+from ..services import cashflow, finance, goal_plan
 from ..services.exchange import RateUnavailable, get_current_rate
 from ..services.simulator import InstallmentOption, SimulationResult, simulate_purchase
 
@@ -110,6 +110,7 @@ class Overview(BaseModel):
     year: finance.YearSummary
     food: finance.FoodBudget
     goals: list[finance.GoalProjection]
+    money: cashflow.MoneyNow
 
 
 @router.get("/finance/overview", response_model=Overview)
@@ -125,6 +126,7 @@ def overview(session: SessionDep, user: CurrentUser):
             year=finance.year_summary(data, today.year, today, rate),
             food=finance.food_budget(data, capacity, user.food_budget_pct, today, rate),
             goals=finance.project_goals(data.goals, capacity.monthly_savings_cents, today),
+            money=cashflow.money_now(data, user.balance_cents, user.balance_at, today, rate),
         )
     except finance.RateMissing:
         raise _rate_error()

@@ -95,6 +95,8 @@ def create_demo_user(session: Session) -> User:
         email=f"demo-{secrets.token_hex(4)}@{DEMO_DOMAIN}", name="Sofía",
         # Contraseña al azar que nadie conoce: a la demo solo se entra con el botón
         hashed_password=hash_password(secrets.token_urlsafe(24)), food_budget_pct=30,
+        # "Tu plata hoy": como si hubiera mirado su cuenta hace 2 días
+        balance_cents=3_850_000, balance_at=utcnow() - dt.timedelta(days=2),
     )
     session.add(user)
     session.commit()
@@ -107,7 +109,7 @@ def create_demo_user(session: Session) -> User:
     rows = [
         Income(user_id=uid, source="Sueldo", amount_cents=salary.monthly.net_cents,
                nominal_cents=salary.monthly.nominal_cents, aguinaldo_cents=salary.aguinaldo.net_cents,
-               start_date=start),
+               start_date=start, pay_day=1, advance_cents=2_000_000, advance_day=15),
         Income(user_id=uid, source="Diseño freelance", amount_cents=900_000, frequency="one_time",
                start_date=add_months_to_date(today, -2)),
     ]

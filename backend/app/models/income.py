@@ -3,6 +3,7 @@
 import datetime as dt
 from enum import Enum
 
+from pydantic import model_validator
 from sqlmodel import Field, SQLModel
 
 from .common import Currency, UpdateSchema, enum_column, today_uy, utcnow
@@ -28,6 +29,18 @@ class IncomeBase(SQLModel):
     # Solo para sueldos (los completa la calculadora de sueldo):
     nominal_cents: int | None = Field(default=None, gt=0)   # sueldo nominal mensual
     aguinaldo_cents: int | None = Field(default=None, ge=0)  # medio aguinaldo LÍQUIDO (junio y diciembre)
+    # CUÁNDO entra la plata (para "Tu plata hoy"). Solo aplica a ingresos mensuales:
+    pay_day: int = Field(default=1, ge=1, le=31)              # día del mes en que se cobra
+    # Adelanto: una PARTE fija del ingreso que se cobra antes (ej: el 15).
+    # amount_cents sigue siendo el total del mes: el día de cobro llega el resto.
+    advance_cents: int | None = Field(default=None, gt=0)
+    advance_day: int | None = Field(default=None, ge=1, le=31)
+
+
+def check_advance(advance_cents: int | None, amount_cents: int | None) -> None:
+    """El adelanto es parte del ingreso: no puede ser mayor o igual al total."""
+    if advance_cents and amount_cents and advance_cents >= amount_cents:
+        raise ValueError("El adelanto tiene que ser menor que el monto total del mes")
 
 
 class Income(IncomeBase, table=True):
@@ -40,7 +53,10 @@ class Income(IncomeBase, table=True):
 
 
 class IncomeCreate(IncomeBase):
-    pass
+    @model_validator(mode="after")
+    def _adelanto_valido(self):
+        check_advance(self.advance_cents, self.amount_cents)
+        return self
 
 
 class IncomeRead(IncomeBase):
@@ -49,7 +65,7 @@ class IncomeRead(IncomeBase):
 
 
 class IncomeUpdate(UpdateSchema):
-    nullable_fields = {"end_date", "nominal_cents", "aguinaldo_cents"}
+    nullable_fields = {"end_date", "nominal_cents", "aguinaldo_cents", "advance_cents", "advance_day"}
 
     source: str | None = Field(default=None, min_length=1, max_length=80)
     amount_cents: int | None = Field(default=None, gt=0)
@@ -59,3 +75,6 @@ class IncomeUpdate(UpdateSchema):
     end_date: dt.date | None = None
     nominal_cents: int | None = Field(default=None, gt=0)
     aguinaldo_cents: int | None = Field(default=None, ge=0)
+    pay_day: int | None = Field(default=None, ge=1, le=31)
+    advance_cents: int | None = Field(default=None, gt=0)
+    advance_day: int | None = Field(default=None, ge=1, le=31)

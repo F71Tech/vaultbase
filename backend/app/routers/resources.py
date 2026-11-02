@@ -22,6 +22,7 @@ from ..models import (
     WishItem, WishItemCreate, WishItemRead, WishItemUpdate,
 )
 from ..models.expense import check_subcategory
+from ..models.income import check_advance
 from ..services.exchange import RateUnavailable, rate_for_date
 from .crud import build_crud_router
 
@@ -44,6 +45,8 @@ incomes_router = build_crud_router(
     model=Income, create_schema=IncomeCreate, read_schema=IncomeRead,
     update_schema=IncomeUpdate, prefix="/api/incomes", tag="Ingresos",
     order_by=Income.start_date,
+    # al editar solo el monto o solo el adelanto, igual hay que revisar los dos juntos
+    validate_item=lambda i: check_advance(i.advance_cents, i.amount_cents),
 )
 
 goals_router = build_crud_router(

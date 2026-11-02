@@ -2,7 +2,9 @@
 
 import { api } from "../api.js";
 import { openExpenseSheet } from "../expense-form.js";
-import { longToday, money, moneyExact, shortDate, shortRange, todayISO } from "../format.js";
+import {
+  centsToInput, longToday, money, moneyExact, parseMoney, shortDate, shortRange, todayISO,
+} from "../format.js";
 import { openIncomeSheet } from "../income-form.js";
 import { categoryLabel, CATEGORY_COLOR, EXTRA_CATEGORY_LABELS, getCategories } from "../labels.js";
 import { mountShell } from "../shell.js";
@@ -33,6 +35,127 @@ async function loadRate() {
   } catch {
     $("usd-chip").lastElementChild.textContent = "Cotización no disponible";
   }
+}
+
+// --- Tu plata hoy ---
+// El backend (services/cashflow.py) hace todas las cuentas; acá solo se dibuja.
+const EVENT_ICON = {
+  income: "banknote", advance: "banknote", aguinaldo: "gift", fixed: "house", subscription: "repeat",
+};
+
+function upcomingList(m) {
+  const rows = m.upcoming.slice(0, 5).map((e) => `
+    <li class="flex items-center gap-2">
+      <span class="muted text-xs w-12 shrink-0">${shortDate(e.date)}</span>
+      <i data-lucide="${EVENT_ICON[e.kind] ?? "circle"}" class="w-3.5 h-3.5 shrink-0 ${e.amount_cents > 0 ? "text-success" : "muted"}"></i>
+      <span class="flex-1 min-w-0 truncate">${esc(e.label)}</span>
+      <span class="tabular-nums ${e.amount_cents > 0 ? "text-success" : ""}">${e.amount_cents > 0 ? "+" : "−"}${money(Math.abs(e.amount_cents))}</span>
+    </li>`);
+  if (m.upcoming.length > 5) rows.push(`<li class="muted text-xs">y ${m.upcoming.length - 5} más…</li>`);
+  if (m.usual_spending_cents) rows.push(`
+    <li class="flex items-center gap-2 pt-1.5 mt-1.5 border-t" style="border-color:var(--border)">
+      <span class="w-12 shrink-0"></span><i data-lucide="shopping-bag" class="w-3.5 h-3.5 muted shrink-0"></i>
+      <span class="flex-1 muted">Tu día a día (estimado)</span>
+      <span class="tabular-nums muted">−${money(m.usual_spending_cents)}</span></li>`);
+  return rows.length ? `<ul class="space-y-1.5 text-sm">${rows.join("")}</ul>`
+    : `<p class="muted text-sm">No hay cobros ni cuentas programadas hasta fin de mes.</p>`;
+}
+
+function renderMoney() {
+  const m = overview.money;
+  const box = $("money");
+  if (!m.has_balance) {
+    box.innerHTML = `
+      <div class="flex flex-col md:flex-row md:items-center gap-4">
+        <span class="icon-badge bg-primary-soft text-primary" style="width:52px;height:52px"><i data-lucide="wallet"></i></span>
+        <div class="flex-1">
+          <h2 class="font-display text-xl font-bold">¿Cuánta plata tenés hoy?</h2>
+          <p class="muted">Sumá tus cuentas y el efectivo. Con eso te digo cuánto podés gastar por día y cuánto ahorrar hasta fin de mes.</p>
+        </div>
+        <button class="btn btn-primary" data-balance><i data-lucide="plus" class="w-4 h-4"></i>Cargar mi saldo</button>
+      </div>`;
+    return;
+  }
+  const end = shortDate(m.month_end);
+  const since = [
+    m.since_income_cents ? `<span class="text-success">+${money(m.since_income_cents)}</span>` : "",
+    m.since_spent_cents ? `−${money(m.since_spent_cents)}` : "",
+  ].filter(Boolean).join(" · ");
+  const short = m.short_cents > 0;
+
+  box.innerHTML = `
+    <div class="grid gap-5 xl:gap-8 md:grid-cols-[13rem_1fr] xl:grid-cols-[13rem_1fr_17rem]">
+      <div>
+        <div class="flex items-center gap-2 muted text-sm"><i data-lucide="wallet" class="w-4 h-4"></i>Tu plata hoy</div>
+        <div class="font-display text-4xl font-bold mt-1 ${m.current_cents < 0 ? "text-danger" : ""}" id="money-current">$ 0</div>
+        <p class="muted text-xs mt-1">Cargaste ${money(m.balance_cents)} el ${shortDate(m.balance_date)}${since ? ` · desde entonces ${since}` : ""}</p>
+        <button class="btn btn-ghost text-sm mt-3" data-balance><i data-lucide="refresh-cw" class="w-4 h-4"></i>Actualizar saldo</button>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3 content-start">
+        <div class="rounded-xl p-4 ${short ? "bg-danger-soft" : "bg-primary-soft"}">
+          <div class="muted text-sm">${short ? "Máximo por día" : "Para gastar por día"}</div>
+          <div class="font-display text-2xl font-bold ${short ? "text-danger" : "text-primary"}" id="money-daily">$ 0</div>
+          <div class="muted text-xs mt-1">hasta el ${end} (${m.days_left} ${m.days_left === 1 ? "día" : "días"})${short ? "" : " · tu ritmo habitual"}</div>
+        </div>
+        <div class="rounded-xl p-4 bg-accent-soft">
+          <div class="muted text-sm">Podés ahorrar</div>
+          <div class="font-display text-2xl font-bold text-accent" id="money-save">$ 0</div>
+          <div class="bar mt-2" style="height:6px"><span data-fill="${m.save_pct}" style="background:var(--accent)"></span></div>
+          <div class="muted text-xs mt-1"><b class="text-accent">${m.save_pct}%</b> de tu plata libre (${money(Math.max(m.free_cents, 0))})</div>
+        </div>
+        ${short ? `<p class="col-span-2 text-sm rounded-xl bg-danger-soft p-3 flex gap-2 items-start">
+            <i data-lucide="circle-alert" class="w-4 h-4 text-danger mt-0.5 shrink-0"></i>
+            <span>A tu ritmo de siempre te faltarían <b>${money(m.short_cents)}</b> para llegar a fin de mes. Para llegar, gastá como máximo lo de arriba por día.</span></p>` : ""}
+        ${m.has_spending_history ? "" : `<p class="col-span-2 muted text-xs">Todavía no tengo historial de tus gastos del día a día: a medida que los anotes, el cálculo se ajusta.</p>`}
+      </div>
+
+      <div class="md:col-span-2 xl:col-span-1">
+        <div class="text-sm font-medium mb-2">Hasta fin de mes</div>
+        ${upcomingList(m)}
+      </div>
+    </div>`;
+  countUp($("money-current"), m.current_cents);
+  countUp($("money-daily"), m.daily_spending_cents);
+  countUp($("money-save"), m.can_save_cents);
+}
+
+let balanceSheet;
+function openBalanceSheet() {
+  balanceSheet ??= createSheet(`
+    <form id="balance-form" novalidate>
+      <h3 class="font-display text-xl font-bold mb-1">¿Cuánta plata tenés hoy?</h3>
+      <p class="muted text-sm">Sumá tus cuentas y el efectivo. Si estás en rojo, poné el número con un "-" adelante.</p>
+      <input id="bs-amount" class="amount-input my-5" inputmode="decimal" placeholder="0" aria-label="Saldo de hoy" autofocus />
+      <p class="muted text-xs mb-4">Desde ahora, VaultBase resta los gastos que anotes y suma tus cobros (sueldo, adelanto) en su día.
+        Cuando quieras, lo actualizás mirando tu cuenta.</p>
+      <p class="form-error mb-2" id="bs-error"></p>
+      <button class="btn btn-primary w-full">Guardar</button>
+      <button type="button" class="btn btn-ghost w-full mt-2 text-sm" id="bs-clear">Dejar de usar "Tu plata hoy"</button>
+    </form>`, { label: "Saldo de hoy" });
+  const q = (s) => balanceSheet.el.querySelector(s);
+  if (!balanceSheet.ready) {
+    balanceSheet.ready = true;
+    const save = async (value, message) => {
+      await api("/api/users/me", { method: "PATCH", body: { balance_cents: value } });
+      toast(message);
+      balanceSheet.close();
+      notifyDataChanged();
+    };
+    q("#balance-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const value = parseMoney(q("#bs-amount").value);
+      if (value === null) return (q("#bs-error").textContent = "Escribí un monto (ej: 25.000).");
+      await save(value, "Saldo actualizado");
+    });
+    q("#bs-clear").addEventListener("click", () => save(null, "Listo, ya no se usa tu saldo"));
+  }
+  const m = overview.money;
+  // Precargamos el saldo estimado, redondeado a pesos (sin centésimos)
+  q("#bs-amount").value = m.has_balance ? centsToInput(Math.round(m.current_cents / 100) * 100) : "";
+  q("#bs-clear").hidden = !m.has_balance;
+  q("#bs-error").textContent = "";
+  balanceSheet.open();
 }
 
 // --- Tarjetas de arriba ---
@@ -218,6 +341,7 @@ function openFoodSheet() {
 
 async function load() {
   overview = await api("/api/finance/overview");
+  renderMoney();
   renderStats();
   renderCharts();
   renderGoals();
@@ -232,6 +356,7 @@ async function init() {
   cats = await getCategories();
   $("onboard-income").addEventListener("click", () => openIncomeSheet());
   $("food-pct").addEventListener("click", openFoodSheet);
+  $("money").addEventListener("click", (e) => { if (e.target.closest("[data-balance]")) openBalanceSheet(); });
   onDataChanged(load);
   document.addEventListener("vb:theme", renderCharts);  // los colores del gráfico cambian con el tema
   loadRate();

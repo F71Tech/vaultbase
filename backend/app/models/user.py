@@ -30,6 +30,10 @@ class User(UserBase, table=True):
     hashed_password: str
     # % del ingreso disponible destinado a comida (configurable por usuario)
     food_budget_pct: int = Field(default=30, ge=0, le=100)
+    # "Tu plata hoy": cuánta plata dijo tener (cuentas + efectivo) y CUÁNDO lo dijo.
+    # Desde ese momento la app suma cobros y resta gastos para estimar el saldo actual.
+    balance_cents: int | None = None
+    balance_at: dt.datetime | None = None
     created_at: dt.datetime = Field(default_factory=utcnow)
 
 
@@ -46,12 +50,18 @@ class UserCreate(UserBase):
 class UserRead(UserBase):
     id: int
     food_budget_pct: int
+    balance_cents: int | None
+    balance_at: dt.datetime | None
     created_at: dt.datetime
 
 
 class UserUpdate(UpdateSchema):
+    nullable_fields = {"balance_cents"}  # null = "dejar de usar Tu plata hoy"
+
     name: str | None = Field(default=None, min_length=1, max_length=80)
     food_budget_pct: int | None = Field(default=None, ge=0, le=100)
+    # Puede ser negativo (ej: tarjeta o cuenta en rojo)
+    balance_cents: int | None = Field(default=None, ge=-100_000_000_000, le=100_000_000_000)
 
 
 class Token(SQLModel):
