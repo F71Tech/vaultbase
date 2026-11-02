@@ -19,7 +19,7 @@ from pydantic import BaseModel
 
 from ..categories import is_discretionary, spending_label
 from ..models import ExpenseKind, Goal
-from . import finance
+from . import cashflow, finance
 from .cashflow import AGUINALDO_DAY
 
 MAX_MILESTONES = 12        # más de 12 hitos no se leen: salteamos meses
@@ -73,6 +73,8 @@ class GoalPlan(BaseModel):
     current_finish_month: int | None
     milestones: list[Milestone]
     tips: list[PlanTip]
+    # Para metas con fecha (hasta ~1 año): cuánto podés tener ese día, día por día
+    budget: cashflow.GoalBudget | None = None
 
 
 # --- Ayudantes --------------------------------------------------------------
@@ -190,6 +192,7 @@ def goal_plan(data: finance.FinanceData, goal: Goal, today: dt.date, rate: float
         current_finish_month=p.estimated_date.month if p.estimated_date and remaining else None,
         milestones=build_milestones(data, goal, monthly, months, today, rate) if remaining else [],
         tips=tips,
+        budget=cashflow.goal_budget(data, goal, today, rate) if remaining else None,
     )
 
 

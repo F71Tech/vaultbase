@@ -2,9 +2,9 @@
 
 import datetime as dt
 
-from backend.app.models import Expense, Income, Subscription
+from backend.app.models import Expense, Goal, Income, Subscription
 from backend.app.services import finance
-from backend.app.services.cashflow import money_now, on_day
+from backend.app.services.cashflow import goal_budget, money_now, on_day
 
 HOY = dt.date(2026, 11, 10)
 RATE = 40.0
@@ -41,11 +41,12 @@ def test_plata_de_hoy_y_cuanto_ahorrar():
     # Hasta fin de mes: entra el adelanto (20.000) el 15 y sale Spotify (US$ 10 = 400) el 20
     assert [(e.date.day, e.kind) for e in m.upcoming] == [(15, "advance"), (20, "subscription")]
     assert m.incoming_cents == 2_000_000 and m.bills_cents == 40_000
-    # Quedan 21 días: a tu ritmo (9.000/mes) gastás 6.300
-    assert m.days_left == 21 and m.usual_spending_cents == 630_000
+    # Quedan 21 días hasta el próximo cobro (1/12): a tu ritmo (9.000/mes = 295,89/día) gastás 6.213,70
+    assert (m.since, m.next_pay) == (dt.date(2026, 11, 1), dt.date(2026, 12, 1))
+    assert m.days_left == 21 and m.usual_spending_cents == 621_370
     assert m.free_cents == 4_410_000
-    assert m.can_save_cents == 3_780_000 and m.save_pct == 86
-    assert m.daily_spending_cents == 30_000 and m.short_cents == 0
+    assert m.can_save_cents == 3_788_630 and m.save_pct == 86
+    assert m.daily_spending_cents == 29_589 and m.short_cents == 0
 
 
 def test_lo_de_hoy_ya_cuenta_y_no_se_repite_en_lo_que_viene():
@@ -64,12 +65,13 @@ def test_si_no_llega_a_fin_de_mes():
     assert m.daily_spending_cents == 0
 
 
-def test_sueldo_sin_adelanto_entra_entero_el_dia_de_cobro():
+def test_cuenta_desde_el_ultimo_cobro():
+    # Cobra el 25: el 10/11 vive del sueldo del 25/10, hasta el 24/11
     sueldo = Income(id=1, user_id=1, source="Sueldo", amount_cents=6_000_000,
                     start_date=dt.date(2026, 1, 1), pay_day=25)
     m = money_now(finance.FinanceData(incomes=[sueldo]), HOY, RATE)
-    assert m.current_cents == 0
-    assert [(e.date.day, e.amount_cents) for e in m.upcoming] == [(25, 6_000_000)]
+    assert (m.since, m.next_pay, m.period_end) == (dt.date(2026, 10, 25), dt.date(2026, 11, 25), dt.date(2026, 11, 24))
+    assert m.current_cents == 6_000_000 and m.upcoming == []
 
 
 def test_ingreso_unico_del_mes_suma():
@@ -102,3 +104,51 @@ def test_api_adelanto_menor_que_el_total(client, auth):
     # Bajar el total por debajo del adelanto tampoco se permite
     res = client.patch(f"/api/incomes/{inc['id']}", json={"amount_cents": 1_000_000}, headers=auth)
     assert res.status_code == 422
+
+
+# --- Presupuesto real de una meta con fecha ----------------------------------
+
+def caso_viaje(aguinaldo=True):
+    """Cobra $ 60.000 el 30, alquiler el 5, gasta $ 9.000/mes; viaje de $ 15.000 el 6/12."""
+    sueldo = Income(id=1, user_id=1, source="Sueldo", amount_cents=6_000_000, start_date=dt.date(2026, 1, 1),
+                    pay_day=30, aguinaldo_cents=3_000_000 if aguinaldo else None)
+    data = datos()
+    data.incomes = [sueldo]
+    data.subscriptions = []
+    viaje = Goal(id=1, user_id=1, name="Viaje", target_cents=1_500_000, saved_cents=0,
+                 deadline=dt.date(2026, 12, 6))
+    data.goals = [viaje]
+    return data, viaje
+
+
+def test_presupuesto_real_del_viaje():
+    data, viaje = caso_viaje()
+    b = goal_budget(data, viaje, dt.date(2026, 11, 2), RATE)
+    por_dia = 900_000 * 12 / 365
+    # Vive hasta el 29/12 (el 30 vuelve a cobrar)
+    assert b.next_pay == dt.date(2026, 12, 30) and b.covers_until == dt.date(2026, 12, 29)
+    # Hoy: el sueldo del 30/10. Para el 6/12: +sueldo 30/11, -2 alquileres, -34 días de gastos
+    assert b.start_cents == 6_000_000
+    assert b.on_deadline_cents == round(9_000_000 - 34 * por_dia)
+    # El día más justo es el 17/12, justo antes del aguinaldo del 18
+    assert b.lowest_date == dt.date(2026, 12, 17)
+    assert b.cushion_cents == round(por_dia * 7)
+    assert b.max_cents == round(9_000_000 - 45 * por_dia) - b.cushion_cents
+    assert b.difference_cents == b.max_cents - 1_500_000 > 0     # le sobra presupuesto
+    assert any(s.kind == "aguinaldo" and s.date == dt.date(2026, 12, 18) for s in b.steps)
+    assert not b.short_before
+
+
+def test_el_aguinaldo_agranda_el_presupuesto():
+    con = goal_budget(*caso_viaje(aguinaldo=True), dt.date(2026, 11, 2), RATE)
+    sin = goal_budget(*caso_viaje(aguinaldo=False), dt.date(2026, 11, 2), RATE)
+    assert con.max_cents > sin.max_cents
+    assert sin.lowest_date == dt.date(2026, 12, 29)   # sin aguinaldo, lo más justo es el final
+
+
+def test_sin_fecha_o_muy_lejos_no_hay_presupuesto():
+    data, viaje = caso_viaje()
+    viaje.deadline = None
+    assert goal_budget(data, viaje, HOY, RATE) is None
+    viaje.deadline = dt.date(2029, 1, 1)
+    assert goal_budget(data, viaje, HOY, RATE) is None

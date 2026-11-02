@@ -1,7 +1,7 @@
 // metas.js · Metas de ahorro: progreso, fecha estimada, sumar ahorro y celebrar.
 
 import { api } from "../api.js";
-import { centsToInput, money, parseMoney } from "../format.js";
+import { centsToInput, money, parseMoney, shortDate } from "../format.js";
 import { mountShell } from "../shell.js";
 import {
   celebrate, confirmDialog, countUp, createSheet, esc, fillBars, icons, notifyDataChanged, onDataChanged, toast,
@@ -264,7 +264,7 @@ function planCheck(plan) {
 }
 
 // 3) Ideas: cada una dice cuánto suma por mes, y al final si todas juntas alcanzan
-function planIdeas(plan) {
+function planIdeas(plan, heading = `Ideas para conseguir los ${money(plan.gap_cents)} que faltan`) {
   const ideas = plan.tips.filter((t) => t.kind !== "extend");
   const extend = plan.tips.find((t) => t.kind === "extend");
   if (!ideas.length && !extend) return "";
@@ -288,7 +288,7 @@ function planIdeas(plan) {
     </div>` : "";
   return `
     ${ideas.length ? `
-      <h4 class="font-display font-bold mt-6 mb-1">Ideas para conseguir los ${money(plan.gap_cents)} que faltan</h4>
+      <h4 class="font-display font-bold mt-6 mb-1">${heading}</h4>
       <p class="muted text-xs mb-3">Cada una muestra cuánto te suma por mes. Podés combinarlas.</p>
       <ul class="space-y-2">${ideas.map(card).join("")}</ul>${summary}` : ""}
     ${extend ? `
@@ -296,8 +296,80 @@ function planIdeas(plan) {
       <ul>${card(extend, ideas.length)}</ul>` : ""}`;
 }
 
+// 1 bis) Metas con fecha cercana: el presupuesto real, calculado día por día
+// (services/cashflow.py goal_budget): cobros, cuentas, aguinaldo y gastos habituales.
+const STEP_ICON = { income: "banknote", advance: "banknote", aguinaldo: "gift", fixed: "house", goal: "plane" };
+const longDate = (iso) => new Date(iso + "T00:00").toLocaleDateString("es-UY", { day: "numeric", month: "long" });
+
+function planBudget(plan) {
+  const b = plan.budget;
+  const ok = b.difference_cents >= 0;
+  const verdict = ok
+    ? `Tu objetivo es ${money(b.target_cents)}: <b>te alcanza y te sobran ${money(b.difference_cents)}</b>. Si querés, ${esc(plan.name)} puede ser más grande.`
+    : `Tu objetivo es ${money(b.target_cents)}: <b>te faltan ${money(-b.difference_cents)}</b>. Abajo tenés ideas para conseguirlos.`;
+  const rows = b.steps.map((s) => s.kind === "goal" ? `
+      <li class="flex items-center gap-2 rounded-lg px-2 py-1.5 -mx-2 bg-accent-soft">
+        <span class="text-xs w-14 shrink-0 font-medium">${shortDate(s.date)}</span>
+        <i data-lucide="${STEP_ICON.goal}" class="w-3.5 h-3.5 text-accent shrink-0"></i>
+        <span class="flex-1 min-w-0 truncate font-medium">${esc(s.label)}</span>
+        <span class="tabular-nums font-medium text-accent">hasta ${money(-s.amount_cents)}</span>
+      </li>` : `
+      <li class="flex items-center gap-2">
+        <span class="muted text-xs w-14 shrink-0">${shortDate(s.date)}</span>
+        <i data-lucide="${STEP_ICON[s.kind] ?? "circle"}" class="w-3.5 h-3.5 shrink-0 ${s.amount_cents > 0 ? "text-success" : "muted"}"></i>
+        <span class="flex-1 min-w-0 truncate">${esc(s.label)}</span>
+        <span class="tabular-nums ${s.amount_cents > 0 ? "text-success" : ""}">${s.amount_cents > 0 ? "+" : "−"}${money(Math.abs(s.amount_cents))}</span>
+      </li>`).join("");
+  return `
+    <p class="text-sm mt-3">Para el <b>${longDate(b.deadline)}</b> podés tener hasta:</p>
+    <div class="mt-1 flex items-baseline gap-2 flex-wrap">
+      <span class="font-display text-4xl font-bold text-primary" id="plan-monthly">$ 0</span><span class="muted">para ${esc(plan.name)}</span>
+    </div>
+    ${b.saved_cents ? `<p class="muted text-xs mt-1">Incluye los ${money(b.saved_cents)} que ya tenés guardados.</p>` : ""}
+    <div class="mt-3 rounded-xl p-3 text-sm flex gap-2 items-start ${ok ? "bg-primary-soft" : "bg-danger-soft"}">
+      <i data-lucide="${ok ? "circle-check" : "circle-alert"}" class="w-4 h-4 mt-0.5 shrink-0 ${ok ? "text-success" : "text-danger"}"></i>
+      <span>${verdict}</span>
+    </div>
+    ${b.short_before ? `<p class="mt-2 rounded-xl bg-danger-soft p-3 text-sm">Ojo: antes de esa fecha tu plata ya no alcanza para tus gastos de siempre. Revisá tus gastos de estas semanas.</p>` : ""}
+
+    <div class="card p-4 mt-5">
+      <h4 class="font-display font-bold mb-1">Cómo llega tu plata</h4>
+      <p class="muted text-xs mb-3">Hoy tenés ${money(b.start_cents)}. Contamos cada cobro y cada cuenta en su día, y lo que solés gastar día a día.</p>
+      <ul class="space-y-1.5 text-sm">${rows}
+        <li class="flex items-center gap-2 pt-1.5 mt-1.5 border-t" style="border-color:var(--border)">
+          <span class="muted text-xs w-14 shrink-0">${shortDate(b.covers_until)}</span>
+          <i data-lucide="shield-check" class="w-3.5 h-3.5 text-success shrink-0"></i>
+          <span class="flex-1 muted">Llegás hasta acá; el ${shortDate(b.next_pay)} volvés a cobrar</span>
+        </li>
+      </ul>
+      <p class="muted text-xs mt-3">Tu día más justo después de ${esc(plan.name)} es el <b>${longDate(b.lowest_date)}</b>:
+        ese día te quedarían ${money(b.cushion_cents)} de colchón (una semana de tus gastos), por si algo varía.</p>
+    </div>`;
+}
+
+const stepsHTML = (steps) => `
+    <h4 class="font-display font-bold mt-6 mb-3">Tus pasos</h4>
+    <ol class="space-y-2 text-sm">${steps.map((s, i) => `
+      <li class="flex gap-3"><span class="grid place-items-center w-6 h-6 rounded-full bg-primary-soft text-primary text-xs font-bold shrink-0">${i + 1}</span><span>${s}</span></li>`).join("")}</ol>`;
+
+// Meta con fecha cercana: presupuesto real + ideas (si falta) + pasos
+function planWithBudget(plan) {
+  const ok = plan.budget.difference_cents >= 0;
+  return `
+    <p class="muted text-sm">Plan · ${esc(plan.name)}</p>
+    ${planBudget(plan)}
+    ${ok ? "" : planIdeas(plan, "Ideas para sumar más plata de acá a esa fecha")}
+    ${stepsHTML([
+      `Cuando cobres, separá los <b>${money(plan.remaining_cents)}</b> de ${esc(plan.name)} antes de gastar en otra cosa.`,
+      "Gastá en el día a día como siempre: el cálculo ya cuenta con eso (y con un colchón).",
+      "Seguí anotando tus gastos: si gastás más de lo habitual, este presupuesto se ajusta solo.",
+    ])}
+    <button class="btn btn-ghost w-full mt-6" data-close>Cerrar</button>`;
+}
+
 function planHTML(plan) {
   const when = monthYear(isoMonth(plan.finish_year, plan.finish_month));
+  if (plan.budget) return planWithBudget(plan);
   const steps = [
     `Cuando cobres, separá <b>${money(plan.monthly_cents)}</b> antes de gastar en otra cosa.`,
     "Guardalo aparte (otra cuenta o caja de ahorro) para no tocarlo sin querer.",
@@ -322,9 +394,7 @@ function planHTML(plan) {
     </div>
     ${planCheck(plan)}
     ${planIdeas(plan)}
-    <h4 class="font-display font-bold mt-6 mb-3">Tus pasos</h4>
-    <ol class="space-y-2 text-sm">${steps.map((s, i) => `
-      <li class="flex gap-3"><span class="grid place-items-center w-6 h-6 rounded-full bg-primary-soft text-primary text-xs font-bold shrink-0">${i + 1}</span><span>${s}</span></li>`).join("")}</ol>
+    ${stepsHTML(steps)}
     <h4 class="font-display font-bold mt-6 mb-1">Hitos</h4>
     <p class="muted text-xs mb-3">Lo que deberías tener ahorrado a fin de cada mes${plan.milestones.some((m) => m.aguinaldo_cents) ? " · <i data-lucide=\"gift\" class=\"inline w-3 h-3 text-accent\"></i> = cobrás aguinaldo" : ""}.</p>
     <ul class="space-y-2.5">${milestones}</ul>
@@ -355,7 +425,7 @@ async function openPlanSheet(goal) {
   body.innerHTML = planHTML(plan);
   icons();
   fillBars(body);
-  countUp(body.querySelector("#plan-monthly"), plan.monthly_cents);
+  countUp(body.querySelector("#plan-monthly"), plan.budget ? plan.budget.budget_cents : plan.monthly_cents);
 }
 
 function init() {

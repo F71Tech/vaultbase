@@ -56,7 +56,7 @@ function upcomingList(m) {
       <span class="flex-1 muted">Tu día a día (estimado)</span>
       <span class="tabular-nums muted">−${money(m.usual_spending_cents)}</span></li>`);
   return rows.length ? `<ul class="space-y-1.5 text-sm">${rows.join("")}</ul>`
-    : `<p class="muted text-sm">No hay cobros ni cuentas programadas hasta fin de mes.</p>`;
+    : `<p class="muted text-sm">No hay cobros ni cuentas programadas hasta tu próximo cobro.</p>`;
 }
 
 function renderMoney() {
@@ -65,7 +65,7 @@ function renderMoney() {
   // Cuenta nueva sin movimientos: no hay nada que mostrar todavía
   box.hidden = !m.received_cents && !m.spent_cents && !m.upcoming.length;
   if (box.hidden) return;
-  const end = shortDate(m.month_end);
+  const end = shortDate(m.period_end);
   const short = m.short_cents > 0;
 
   box.innerHTML = `
@@ -74,7 +74,7 @@ function renderMoney() {
         <div class="flex items-center gap-2 muted text-sm"><i data-lucide="wallet" class="w-4 h-4"></i>Tu plata hoy</div>
         <div class="font-display text-4xl font-bold mt-1 ${m.current_cents < 0 ? "text-danger" : ""}" id="money-current">$ 0</div>
         <div class="text-xs mt-2 space-y-0.5">
-          <div class="flex justify-between gap-3"><span class="muted">Te entró este mes</span><span class="text-success">+${money(m.received_cents)}</span></div>
+          <div class="flex justify-between gap-3"><span class="muted">Te entró desde el ${shortDate(m.since)}</span><span class="text-success">+${money(m.received_cents)}</span></div>
           <div class="flex justify-between gap-3"><span class="muted">Gastaste hasta hoy</span><span>−${money(m.spent_cents)}</span></div>
         </div>
       </div>
@@ -93,12 +93,12 @@ function renderMoney() {
         </div>
         ${short ? `<p class="col-span-2 text-sm rounded-xl bg-danger-soft p-3 flex gap-2 items-start">
             <i data-lucide="circle-alert" class="w-4 h-4 text-danger mt-0.5 shrink-0"></i>
-            <span>A tu ritmo de siempre te faltarían <b>${money(m.short_cents)}</b> para llegar a fin de mes. Para llegar, gastá como máximo lo de arriba por día.</span></p>` : ""}
+            <span>A tu ritmo de siempre te faltarían <b>${money(m.short_cents)}</b> para llegar a tu próximo cobro. Para llegar, gastá como máximo lo de arriba por día.</span></p>` : ""}
         ${m.has_spending_history ? "" : `<p class="col-span-2 muted text-xs">Todavía no tengo historial de tus gastos del día a día: a medida que los anotes, el cálculo se ajusta.</p>`}
       </div>
 
       <div class="md:col-span-2 xl:col-span-1">
-        <div class="text-sm font-medium mb-2">Hasta fin de mes</div>
+        <div class="text-sm font-medium mb-2">Hasta tu próximo cobro <span class="muted font-normal">(${shortDate(m.next_pay)})</span></div>
         ${upcomingList(m)}
       </div>
     </div>`;

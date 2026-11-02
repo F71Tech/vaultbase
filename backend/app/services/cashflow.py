@@ -7,11 +7,13 @@ pensamos en DÍAS: el sueldo entra el 1, el adelanto el 15, el alquiler sale
 el 5, Spotify el 12… Cada movimiento con fecha es un "evento".
 
 La idea (todo automático, sin pedirle nada al usuario):
-  1) Plata de HOY = lo que ya te entró este mes - lo que ya gastaste hasta hoy
-     (cada cobro y cada pago cuenta recién el día que ocurre).
-  2) Miramos lo que falta hasta fin de mes: cobros que van a entrar, cuentas
-     que hay que pagar y lo que solés gastar en el día a día.
+  1) Plata de HOY = lo que te entró desde tu último cobro - lo que gastaste
+     desde entonces (cada cobro y cada pago cuenta recién el día que ocurre).
+  2) Miramos lo que falta hasta tu próximo cobro: lo que va a entrar (ej: el
+     adelanto), cuentas que hay que pagar y lo que solés gastar por día.
   3) Lo que sobra es lo que podés ahorrar (y qué % de tu plata es).
+  4) Para metas con fecha: simulamos día por día cuánto podés juntar para
+     esa fecha sin quedarte corto después (goal_budget, más abajo).
 
 Funciones PURAS, montos en centésimos de peso uruguayo.
 """
@@ -37,12 +39,14 @@ class CashEvent(BaseModel):
 
 
 class MoneyNow(BaseModel):
-    received_cents: int               # lo que ya te entró este mes
-    spent_cents: int                  # lo que ya gastaste este mes (positivo)
+    received_cents: int               # lo que te entró desde tu último cobro
+    spent_cents: int                  # lo que gastaste desde entonces (positivo)
     current_cents: int                # plata de HOY = recibido - gastado
-    month_end: dt.date
-    days_left: int                    # días que quedan, contando hoy
-    upcoming: list[CashEvent]         # lo que entra y sale hasta fin de mes
+    since: dt.date                    # tu último cobro (o el día 1 si no hay sueldo)
+    next_pay: dt.date                 # tu próximo cobro
+    period_end: dt.date               # el día antes del próximo cobro
+    days_left: int                    # días que quedan hasta period_end, contando hoy
+    upcoming: list[CashEvent]         # lo que entra y sale hasta tu próximo cobro
     incoming_cents: int
     bills_cents: int                  # positivo
     usual_spending_cents: int         # lo que solés gastar en lo que queda del mes
@@ -150,26 +154,64 @@ def logged_events(data: finance.FinanceData, start: dt.date, end: dt.date, rate:
     return events
 
 
+# --- El ciclo de cobro ------------------------------------------------------
+# La plata no se vive "del 1 al 31": se vive de un sueldo al siguiente.
+# Si cobrás el 30, lo que gastás el 2 de noviembre sale del sueldo del 30 de
+# octubre. Por eso "tu plata hoy" cuenta desde tu ÚLTIMO cobro.
+
+def main_income(data: finance.FinanceData, today: dt.date):
+    """El sueldo principal: el ingreso mensual vigente más grande (o None)."""
+    monthly = [
+        i for i in data.incomes
+        if i.frequency == IncomeFrequency.monthly and i.start_date <= today
+        and (i.end_date is None or i.end_date >= today)
+    ]
+    return max(monthly, key=lambda i: i.amount_cents, default=None)
+
+
+def pay_cycle(data: finance.FinanceData, today: dt.date, rate: float | None) -> tuple[dt.date, dt.date]:
+    """
+    (día del último cobro, día del próximo cobro) del sueldo principal.
+    Sin sueldo mensual: el mes calendario (del 1 al 1 del mes siguiente).
+    """
+    income = main_income(data, today)
+    if income is not None:
+        window = dt.timedelta(days=62)
+        pays = [ev.date for ev in income_events(income, today - window, today + window, rate) if ev.kind == "income"]
+        last = [d for d in pays if d <= today]
+        nxt = [d for d in pays if d > today]
+        if last and nxt:
+            return last[-1], nxt[0]
+    first, last_day = finance.month_bounds(today.year, today.month)
+    return first, last_day + dt.timedelta(days=1)
+
+
+def daily_spending(data: finance.FinanceData, today: dt.date, rate: float | None) -> float:
+    """Lo que solés gastar por día en el día a día (promedio mensual / días del mes)."""
+    return finance.average_variable_expenses(data, today, rate) * 12 / 365
+
+
 # --- El cálculo principal ---------------------------------------------------
 
 def money_now(data: finance.FinanceData, today: dt.date, rate: float | None) -> MoneyNow:
-    month_start, month_end = finance.month_bounds(today.year, today.month)
-    days_left = (month_end - today).days + 1
+    since, next_pay = pay_cycle(data, today, rate)
+    period_end = next_pay - dt.timedelta(days=1)   # hasta el día antes del próximo sueldo
+    days_left = (period_end - today).days + 1
 
-    # 1) Plata de hoy: todo lo que pasó este mes, desde el día 1 hasta hoy
-    so_far = scheduled_events(data, month_start, today, rate) + logged_events(data, month_start, today, rate)
+    # 1) Plata de hoy: todo lo que pasó desde tu último cobro hasta hoy
+    so_far = scheduled_events(data, since, today, rate) + logged_events(data, since, today, rate)
     received = sum(ev.amount_cents for ev in so_far if ev.amount_cents > 0)
     spent = -sum(ev.amount_cents for ev in so_far if ev.amount_cents < 0)
     current = received - spent
 
-    # 2) Lo que falta hasta fin de mes (desde mañana: lo de hoy ya está en el punto 1)
-    upcoming = scheduled_events(data, today + dt.timedelta(days=1), month_end, rate)
+    # 2) Lo que falta hasta tu próximo cobro (desde mañana: lo de hoy ya está en el punto 1)
+    upcoming = scheduled_events(data, today + dt.timedelta(days=1), period_end, rate)
     incoming = sum(ev.amount_cents for ev in upcoming if ev.amount_cents > 0)
     bills = -sum(ev.amount_cents for ev in upcoming if ev.amount_cents < 0)
 
-    # Lo que solés gastar en el día a día, proporcional a los días que quedan
-    avg_variable = finance.average_variable_expenses(data, today, rate)
-    usual = round(avg_variable * days_left / month_end.day)
+    # Lo que solés gastar en el día a día en los días que quedan
+    per_day = daily_spending(data, today, rate)
+    usual = round(per_day * days_left)
 
     # 3) Plata libre = hoy + lo que entra - lo que ya está comprometido
     free = current + incoming - bills
@@ -184,8 +226,97 @@ def money_now(data: finance.FinanceData, today: dt.date, rate: float | None) -> 
 
     return MoneyNow(
         received_cents=received, spent_cents=spent, current_cents=current,
-        month_end=month_end, days_left=days_left, upcoming=upcoming,
+        since=since, next_pay=next_pay, period_end=period_end, days_left=days_left, upcoming=upcoming,
         incoming_cents=incoming, bills_cents=bills, usual_spending_cents=usual,
-        has_spending_history=avg_variable > 0, free_cents=free, can_save_cents=can_save,
+        has_spending_history=per_day > 0, free_cents=free, can_save_cents=can_save,
         save_pct=save_pct, daily_spending_cents=daily, short_cents=short,
+    )
+
+
+# --- Presupuesto real de una meta con fecha ---------------------------------
+# Pregunta: "el 6 de diciembre me voy de viaje: ¿cuánto puedo llevar como
+# máximo, sin quedarme sin plata antes de mi próximo sueldo?"
+#
+# Simulamos tu saldo día por día, desde hoy hasta el día antes del primer
+# sueldo DESPUÉS de la fecha: cada cobro (sueldo, adelanto, aguinaldo) suma,
+# cada cuenta y suscripción resta en su día, y todos los días se resta lo que
+# solés gastar. Lo máximo para la meta es tu saldo en el día MÁS JUSTO desde
+# la fecha en adelante (si gastás más que eso, ese día quedarías en rojo),
+# menos un colchón por si algo varía.
+
+CUSHION_DAYS = 7          # colchón: una semana de tus gastos habituales
+MAX_BUDGET_DAYS = 400     # más lejos que ~1 año, el promedio mensual es más útil
+
+
+class BudgetStep(BaseModel):
+    date: dt.date
+    label: str
+    amount_cents: int
+    kind: str      # como CashEvent.kind, más "goal" (el día de la meta)
+
+
+class GoalBudget(BaseModel):
+    deadline: dt.date
+    start_cents: int          # tu plata hoy
+    on_deadline_cents: int    # la plata que tendrías ese día (sin gastar en la meta)
+    cushion_cents: int        # lo que dejamos de margen
+    max_cents: int            # lo máximo que podés poner en la meta ese día
+    saved_cents: int          # lo que ya tenés guardado para la meta
+    budget_cents: int         # presupuesto real = guardado + máximo
+    target_cents: int
+    difference_cents: int     # presupuesto - objetivo (+ te sobra / - te falta)
+    lowest_date: dt.date      # tu día más justo después de la meta
+    covers_until: dt.date     # hasta acá vivís con lo que queda…
+    next_pay: dt.date         # …porque este día volvés a cobrar
+    short_before: bool        # True = antes de la fecha ya te quedarías sin plata
+    steps: list[BudgetStep]   # lo importante que pasa en el medio (para mostrar)
+
+
+def goal_budget(data: finance.FinanceData, goal, today: dt.date, rate: float | None) -> GoalBudget | None:
+    deadline = goal.deadline
+    if deadline is None or deadline <= today or (deadline - today).days > MAX_BUDGET_DAYS:
+        return None
+    _, next_pay = pay_cycle(data, deadline, rate)       # primer sueldo después de la fecha
+    horizon = next_pay - dt.timedelta(days=1)
+
+    per_day = daily_spending(data, today, rate)
+    start = money_now(data, today, rate).current_cents
+    events = scheduled_events(data, today + dt.timedelta(days=1), horizon, rate)
+    by_day: dict[dt.date, int] = {}
+    for ev in events:
+        by_day[ev.date] = by_day.get(ev.date, 0) + ev.amount_cents
+
+    balance = float(start)
+    lowest_before = balance
+    on_deadline = lowest_after = None
+    lowest_date = deadline
+    day = today + dt.timedelta(days=1)
+    while day <= horizon:
+        balance += by_day.get(day, 0) - per_day
+        if day < deadline:
+            lowest_before = min(lowest_before, balance)
+        else:
+            if day == deadline:
+                on_deadline = balance
+            if lowest_after is None or balance < lowest_after:
+                lowest_after, lowest_date = balance, day
+        day += dt.timedelta(days=1)
+
+    cushion = round(per_day * CUSHION_DAYS)
+    max_for_goal = max(round(lowest_after) - cushion, 0)
+    budget = goal.saved_cents + max_for_goal
+
+    # Lo importante para mostrar: cobros y cuentas fijas (las suscripciones y
+    # los gastos del día a día van resumidos en el texto, si no es una lista eterna)
+    steps = [BudgetStep(date=ev.date, label=ev.label, amount_cents=ev.amount_cents, kind=ev.kind)
+             for ev in events if ev.kind in ("income", "advance", "aguinaldo", "fixed")]
+    steps.append(BudgetStep(date=deadline, label=goal.name, amount_cents=-max_for_goal, kind="goal"))
+    steps.sort(key=lambda s: (s.date, s.kind != "goal"))
+
+    return GoalBudget(
+        deadline=deadline, start_cents=start, on_deadline_cents=round(on_deadline),
+        cushion_cents=cushion, max_cents=max_for_goal, saved_cents=goal.saved_cents,
+        budget_cents=budget, target_cents=goal.target_cents,
+        difference_cents=budget - goal.target_cents, lowest_date=lowest_date,
+        covers_until=horizon, next_pay=next_pay, short_before=lowest_before < 0, steps=steps,
     )
