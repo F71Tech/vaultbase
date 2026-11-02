@@ -30,12 +30,15 @@ def freeze_exchange_rate(expense: Expense, session) -> None:
     """
     Si el gasto es en dólares y no trae cotización, guardamos la del día del
     gasto. Así su valor en pesos queda "congelado" para siempre.
+    (Al editar, el frontend manda exchange_rate=null si cambió la fecha o la
+    moneda, para que se vuelva a calcular.)
     """
     if expense.currency == Currency.USD and expense.exchange_rate is None:
         try:
             expense.exchange_rate = rate_for_date(session, expense.date)
         except RateUnavailable:
             pass  # sin cotización: los cálculos usarán la actual cuando exista
+
 
 incomes_router = build_crud_router(
     model=Income, create_schema=IncomeCreate, read_schema=IncomeRead,
@@ -66,7 +69,7 @@ expenses_router = build_crud_router(
     update_schema=ExpenseUpdate, prefix="/api/expenses", tag="Gastos",
     order_by=Expense.date, include_list=False,
     validate_item=lambda e: check_subcategory(e.category, e.subcategory),
-    on_create=lambda e, session: freeze_exchange_rate(e, session),
+    before_save=freeze_exchange_rate,
 )
 
 

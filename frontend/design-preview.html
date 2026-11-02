@@ -1,0 +1,417 @@
+<!doctype html>
+<html lang="es" data-palette="boveda" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>VaultBase · Muestra de diseño</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.1.11"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+
+  <style>
+    /* ===== Paletas =====
+       Cada paleta define los mismos "tokens" (variables). Los componentes solo
+       usan tokens, así que cambiar de paleta = cambiar estas variables. */
+    :root {
+      --font-display: "Space Grotesk", "Inter", sans-serif;
+      --font-body: "Inter", system-ui, sans-serif;
+      --radius: 18px;
+      --danger: #F43F5E;
+      --cat-3: #8B5CF6; --cat-4: #38BDF8; --cat-5: #F472B6; --cat-6: #94A3B8;
+    }
+    /* Oscuro (base para las paletas oscuras) */
+    [data-theme="dark"] {
+      --bg: #0B1220; --surface: #121A2B; --surface-2: #1A2438;
+      --border: rgba(255,255,255,.08); --text: #E6EAF2; --muted: #8B95A9;
+      --shadow: 0 10px 30px -12px rgba(0,0,0,.6);
+    }
+    [data-theme="light"] {
+      --bg: #F4F6F9; --surface: #FFFFFF; --surface-2: #EEF1F5;
+      --border: rgba(15,23,42,.08); --text: #0F172A; --muted: #5B6577;
+      --shadow: 0 10px 30px -14px rgba(15,23,42,.18);
+    }
+    /* A · Bóveda: esmeralda + ámbar */
+    [data-palette="boveda"] { --primary: #10B981; --primary-soft: rgba(16,185,129,.14); --accent: #F59E0B; --accent-soft: rgba(245,158,11,.14); --on-primary: #06281D; }
+    [data-palette="boveda"][data-theme="light"] { --primary: #059669; --accent: #D97706; --on-primary: #FFFFFF; }
+    /* B · Celeste: inspirada en Uruguay (celeste + sol) */
+    [data-palette="celeste"] { --primary: #4FB3E8; --primary-soft: rgba(79,179,232,.15); --accent: #F5C542; --accent-soft: rgba(245,197,66,.15); --on-primary: #06233A; }
+    [data-palette="celeste"][data-theme="dark"] { --bg: #08152A; --surface: #0E1F38; --surface-2: #152A48; }
+    [data-palette="celeste"][data-theme="light"] { --primary: #1D8FCB; --accent: #C9940A; --on-primary: #FFFFFF; }
+    /* C · Lavanda: violeta + coral, más "fintech" */
+    [data-palette="lavanda"] { --primary: #8B7CF6; --primary-soft: rgba(139,124,246,.16); --accent: #FB7185; --accent-soft: rgba(251,113,133,.15); --on-primary: #160F3A; --cat-3: #10B981; }
+    [data-palette="lavanda"][data-theme="dark"] { --bg: #0D0B1A; --surface: #161327; --surface-2: #201C36; }
+    [data-palette="lavanda"][data-theme="light"] { --primary: #6D5AE6; --accent: #E11D48; --on-primary: #FFFFFF; }
+
+    /* ===== Base ===== */
+    html { background: var(--bg); }
+    body { background: var(--bg); color: var(--text); font-family: var(--font-body);
+           transition: background-color .4s ease, color .4s ease; }
+    .font-display { font-family: var(--font-display); }
+    .muted { color: var(--muted); }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+            box-shadow: var(--shadow); transition: background-color .4s ease, transform .25s ease, border-color .25s; }
+    .card:hover { transform: translateY(-2px); }
+    .chip { display: inline-flex; align-items: center; gap: .4rem; padding: .3rem .7rem; border-radius: 999px;
+            font-size: .75rem; font-weight: 500; border: 1px solid var(--border); background: var(--surface-2); }
+    .text-primary { color: var(--primary); } .text-accent { color: var(--accent); } .text-danger { color: var(--danger); }
+    .bg-primary-soft { background: var(--primary-soft); } .bg-accent-soft { background: var(--accent-soft); }
+    .btn { display: inline-flex; align-items: center; gap: .5rem; border-radius: 12px; padding: .65rem 1.1rem;
+           font-weight: 600; transition: transform .2s ease, filter .2s ease, background-color .3s; }
+    .btn:hover { transform: translateY(-1px); filter: brightness(1.08); }
+    .btn-primary { background: var(--primary); color: var(--on-primary); }
+    .btn-ghost { background: var(--surface-2); border: 1px solid var(--border); }
+    .icon-badge { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; }
+
+    /* Barras de progreso: arrancan en 0 y se llenan con animación */
+    .bar { height: 10px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+    .bar > span { display: block; height: 100%; width: 0; border-radius: inherit;
+                  transition: width 1.4s cubic-bezier(.2,.8,.2,1); }
+
+    /* Entrada escalonada de las tarjetas */
+    @keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+    .rise { animation: rise .6s cubic-bezier(.2,.8,.2,1) both; }
+
+    /* Botón flotante + hoja inferior para cargar un gasto rápido */
+    .fab { position: fixed; right: 20px; bottom: 88px; width: 58px; height: 58px; border-radius: 18px;
+           background: var(--primary); color: var(--on-primary); display: grid; place-items: center;
+           box-shadow: 0 12px 30px -8px var(--primary); transition: transform .25s ease; z-index: 30; }
+    .fab:hover { transform: scale(1.06) rotate(90deg); }
+    @media (min-width: 768px) { .fab { bottom: 28px; right: 28px; } }
+    .sheet-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.45); opacity: 0; pointer-events: none;
+                      transition: opacity .3s; z-index: 40; }
+    .sheet { position: fixed; left: 0; right: 0; bottom: 0; transform: translateY(105%);
+             transition: transform .4s cubic-bezier(.2,.8,.2,1); z-index: 50; border-radius: 24px 24px 0 0;
+             max-width: 560px; margin: 0 auto; }
+    .sheet-open .sheet-backdrop { opacity: 1; pointer-events: auto; }
+    .sheet-open .sheet { transform: none; }
+    .cat-btn { display: flex; flex-direction: column; align-items: center; gap: .35rem; padding: .7rem .3rem;
+               border-radius: 14px; border: 1px solid var(--border); background: var(--surface-2);
+               font-size: .72rem; transition: all .2s ease; }
+    .cat-btn[aria-pressed="true"] { border-color: var(--primary); background: var(--primary-soft); color: var(--primary); }
+
+    /* Navegación inferior (solo celular) */
+    .bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; z-index: 20; background: var(--surface);
+                  border-top: 1px solid var(--border); }
+
+    .swatch { width: 100%; aspect-ratio: 1.6; border-radius: 14px; border: 1px solid var(--border); }
+    .palette-btn[aria-pressed="true"] { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation: none !important; transition: none !important; }
+    }
+  </style>
+</head>
+<body class="min-h-screen antialiased pb-24 md:pb-10">
+
+  <!-- ===== Barra de control de la muestra (no es parte de la app) ===== -->
+  <div class="sticky top-0 z-30 border-b" style="background: var(--surface); border-color: var(--border)">
+    <div class="mx-auto max-w-6xl px-4 py-3 flex flex-wrap items-center gap-3 justify-between">
+      <div class="text-sm"><span class="font-semibold">Muestra de diseño</span> <span class="muted">· elegí paleta y modo</span></div>
+      <div class="flex flex-wrap gap-2">
+        <button class="palette-btn chip" data-set-palette="boveda" aria-pressed="true">
+          <span class="w-3 h-3 rounded-full" style="background:#10B981"></span><span class="w-3 h-3 rounded-full" style="background:#F59E0B"></span> A · Bóveda
+        </button>
+        <button class="palette-btn chip" data-set-palette="celeste" aria-pressed="false">
+          <span class="w-3 h-3 rounded-full" style="background:#4FB3E8"></span><span class="w-3 h-3 rounded-full" style="background:#F5C542"></span> B · Celeste
+        </button>
+        <button class="palette-btn chip" data-set-palette="lavanda" aria-pressed="false">
+          <span class="w-3 h-3 rounded-full" style="background:#8B7CF6"></span><span class="w-3 h-3 rounded-full" style="background:#FB7185"></span> C · Lavanda
+        </button>
+        <button id="theme-toggle" class="chip"><i data-lucide="sun-moon" class="w-4 h-4"></i> Claro / Oscuro</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="mx-auto max-w-6xl px-4 md:flex md:gap-6">
+    <!-- ===== Menú lateral (escritorio) ===== -->
+    <aside class="hidden md:flex flex-col gap-1 w-56 shrink-0 pt-8 sticky top-16 self-start">
+      <div class="font-display text-2xl font-bold mb-6 px-3">Vault<span class="text-primary">Base</span></div>
+      <a class="btn bg-primary-soft text-primary"><i data-lucide="layout-dashboard" class="w-5 h-5"></i>Inicio</a>
+      <a class="btn muted"><i data-lucide="arrow-left-right" class="w-5 h-5"></i>Movimientos</a>
+      <a class="btn muted"><i data-lucide="target" class="w-5 h-5"></i>Metas</a>
+      <a class="btn muted"><i data-lucide="repeat" class="w-5 h-5"></i>Suscripciones</a>
+      <a class="btn muted"><i data-lucide="calculator" class="w-5 h-5"></i>Simulador</a>
+      <a class="btn muted"><i data-lucide="wallet" class="w-5 h-5"></i>Sueldo</a>
+    </aside>
+
+    <main class="flex-1 pt-6 md:pt-8 space-y-6 min-w-0">
+      <!-- Encabezado -->
+      <header class="rise flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p class="muted text-sm">Lunes 2 de noviembre</p>
+          <h1 class="font-display text-3xl md:text-4xl font-bold tracking-tight">Hola, Ana 👋</h1>
+        </div>
+        <span class="chip"><i data-lucide="dollar-sign" class="w-3.5 h-3.5 text-primary"></i>USD $ 40,19 · BCU · hace 2 h</span>
+      </header>
+
+      <!-- Tarjetas de resumen con números que cuentan -->
+      <section class="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+        <div class="card rise p-4 md:p-5" style="animation-delay:.05s">
+          <div class="flex items-center justify-between mb-3"><span class="muted text-sm">Ingresos del mes</span>
+            <span class="icon-badge bg-primary-soft text-primary"><i data-lucide="trending-up" class="w-5 h-5"></i></span></div>
+          <div class="font-display text-xl md:text-2xl font-bold" data-count="6500000">$ 0</div>
+        </div>
+        <div class="card rise p-4 md:p-5" style="animation-delay:.1s">
+          <div class="flex items-center justify-between mb-3"><span class="muted text-sm">Gastos del mes</span>
+            <span class="icon-badge" style="background:rgba(244,63,94,.14);color:var(--danger)"><i data-lucide="trending-down" class="w-5 h-5"></i></span></div>
+          <div class="font-display text-xl md:text-2xl font-bold" data-count="2634561">$ 0</div>
+        </div>
+        <div class="card rise p-4 md:p-5" style="animation-delay:.15s">
+          <div class="flex items-center justify-between mb-3"><span class="muted text-sm">Balance</span>
+            <span class="icon-badge bg-primary-soft text-primary"><i data-lucide="scale" class="w-5 h-5"></i></span></div>
+          <div class="font-display text-xl md:text-2xl font-bold text-primary" data-count="3865439">$ 0</div>
+        </div>
+        <div class="card rise p-4 md:p-5" style="animation-delay:.2s">
+          <div class="flex items-center justify-between mb-3"><span class="muted text-sm">Ahorro posible / mes</span>
+            <span class="icon-badge bg-accent-soft text-accent"><i data-lucide="piggy-bank" class="w-5 h-5"></i></span></div>
+          <div class="font-display text-xl md:text-2xl font-bold text-accent" data-count="2994682">$ 0</div>
+        </div>
+      </section>
+
+      <!-- Gráficos -->
+      <section class="grid lg:grid-cols-5 gap-4">
+        <div class="card rise p-5 lg:col-span-2" style="animation-delay:.25s">
+          <h2 class="font-display font-semibold text-lg mb-4">Gastos por categoría</h2>
+          <div class="relative mx-auto" style="max-width:240px"><canvas id="donut"></canvas>
+            <div class="absolute inset-0 grid place-items-center pointer-events-none text-center">
+              <div><div class="muted text-xs">Total</div><div class="font-display font-bold text-lg">$ 26.346</div></div>
+            </div>
+          </div>
+          <ul id="legend" class="mt-5 space-y-2 text-sm"></ul>
+        </div>
+        <div class="card rise p-5 lg:col-span-3" style="animation-delay:.3s">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="font-display font-semibold text-lg">Evolución 2026</h2>
+            <span class="chip muted">Barras punteadas = estimado</span>
+          </div>
+          <div style="height:260px"><canvas id="bars"></canvas></div>
+        </div>
+      </section>
+
+      <!-- Metas y comida -->
+      <section class="grid lg:grid-cols-2 gap-4">
+        <div class="card rise p-5" style="animation-delay:.35s">
+          <h2 class="font-display font-semibold text-lg mb-4">Metas</h2>
+          <div class="space-y-5">
+            <div>
+              <div class="flex justify-between items-baseline mb-2">
+                <div class="flex items-center gap-2 font-medium"><i data-lucide="plane" class="w-4 h-4 text-accent"></i>Viaje a Brasil</div>
+                <span class="text-sm muted">$ 10.000 / $ 60.000</span>
+              </div>
+              <div class="bar"><span data-fill="16.7" style="background:var(--accent)"></span></div>
+              <div class="flex justify-between mt-2 text-xs"><span class="text-primary">● En camino</span><span class="muted">Llegás en feb. 2027</span></div>
+            </div>
+            <div>
+              <div class="flex justify-between items-baseline mb-2">
+                <div class="flex items-center gap-2 font-medium"><i data-lucide="shield-check" class="w-4 h-4 text-primary"></i>Fondo de emergencia</div>
+                <span class="text-sm muted">$ 62.000 / $ 100.000</span>
+              </div>
+              <div class="bar"><span data-fill="62" style="background:var(--primary)"></span></div>
+              <div class="flex justify-between mt-2 text-xs"><span class="muted">Sin fecha límite</span><span class="muted">8 meses más</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card rise p-5" style="animation-delay:.4s">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="font-display font-semibold text-lg">Comida · noviembre</h2>
+            <span class="chip">30% del disponible</span>
+          </div>
+          <div class="flex items-end gap-3 mb-4">
+            <div class="font-display text-3xl font-bold" data-count="840431">$ 0</div>
+            <div class="muted text-sm pb-1">te quedan de $ 12.964</div>
+          </div>
+          <div id="weeks" class="space-y-3"></div>
+        </div>
+      </section>
+
+      <!-- Tipografía y botones -->
+      <section class="card rise p-5" style="animation-delay:.45s">
+        <h2 class="font-display font-semibold text-lg mb-4">Tipografía y botones</h2>
+        <div class="grid md:grid-cols-2 gap-6">
+          <div class="space-y-2">
+            <div class="font-display text-4xl font-bold">Space Grotesk</div>
+            <div class="muted text-sm">Títulos y cifras: $ 1.234.567,89</div>
+            <div class="text-lg mt-3">Inter — el texto de todos los días, cómodo de leer en pantallas chicas.</div>
+          </div>
+          <div class="flex flex-wrap gap-3 items-start">
+            <button class="btn btn-primary"><i data-lucide="plus" class="w-4 h-4"></i>Agregar gasto</button>
+            <button class="btn btn-ghost">Cancelar</button>
+            <span class="chip"><i data-lucide="utensils" class="w-3.5 h-3.5"></i>Comida</span>
+            <span class="chip text-accent"><i data-lucide="clock" class="w-3.5 h-3.5"></i>Vence el 15</span>
+          </div>
+        </div>
+        <div class="grid grid-cols-3 sm:grid-cols-6 gap-3 mt-6 text-xs muted">
+          <div><div class="swatch" style="background:var(--bg)"></div>Fondo</div>
+          <div><div class="swatch" style="background:var(--surface)"></div>Superficie</div>
+          <div><div class="swatch" style="background:var(--primary)"></div>Principal</div>
+          <div><div class="swatch" style="background:var(--accent)"></div>Acento</div>
+          <div><div class="swatch" style="background:var(--danger)"></div>Alerta</div>
+          <div><div class="swatch" style="background:var(--text)"></div>Texto</div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Botón flotante: gasto rápido -->
+  <button class="fab" id="fab" aria-label="Agregar gasto rápido"><i data-lucide="plus" class="w-7 h-7"></i></button>
+
+  <!-- Hoja inferior de gasto rápido -->
+  <div id="sheet-root">
+    <div class="sheet-backdrop" data-close></div>
+    <div class="sheet card p-5 pb-8">
+      <div class="w-10 h-1.5 rounded-full mx-auto mb-4" style="background:var(--border)"></div>
+      <h3 class="font-display text-xl font-bold mb-1">Gasto rápido</h3>
+      <p class="muted text-sm mb-4">Hoy · en pesos</p>
+      <div class="font-display text-5xl font-bold mb-5 text-center">$ <span class="text-primary">60</span></div>
+      <div class="grid grid-cols-4 gap-2 mb-3">
+        <button class="cat-btn" aria-pressed="true"><i data-lucide="utensils" class="w-5 h-5"></i>Comida</button>
+        <button class="cat-btn" aria-pressed="false"><i data-lucide="bus" class="w-5 h-5"></i>Transporte</button>
+        <button class="cat-btn" aria-pressed="false"><i data-lucide="party-popper" class="w-5 h-5"></i>Ocio</button>
+        <button class="cat-btn" aria-pressed="false"><i data-lucide="ellipsis" class="w-5 h-5"></i>Más</button>
+      </div>
+      <div class="flex flex-wrap gap-2 mb-5">
+        <span class="chip">Supermercado</span><span class="chip">Delivery</span>
+        <span class="chip text-primary" style="border-color:var(--primary)">Kiosco y antojos</span><span class="chip">Restaurantes</span>
+      </div>
+      <button class="btn btn-primary w-full justify-center" data-close>Guardar</button>
+    </div>
+  </div>
+
+  <!-- Navegación inferior (celular) -->
+  <nav class="bottom-nav md:hidden">
+    <div class="grid grid-cols-5 text-[11px] text-center py-2">
+      <a class="text-primary flex flex-col items-center gap-1"><i data-lucide="layout-dashboard" class="w-5 h-5"></i>Inicio</a>
+      <a class="muted flex flex-col items-center gap-1"><i data-lucide="arrow-left-right" class="w-5 h-5"></i>Movim.</a>
+      <a class="muted flex flex-col items-center gap-1"><i data-lucide="target" class="w-5 h-5"></i>Metas</a>
+      <a class="muted flex flex-col items-center gap-1"><i data-lucide="calculator" class="w-5 h-5"></i>Simular</a>
+      <a class="muted flex flex-col items-center gap-1"><i data-lucide="menu" class="w-5 h-5"></i>Más</a>
+    </div>
+  </nav>
+
+  <script>
+    const root = document.documentElement;
+    const css = (name) => getComputedStyle(root).getPropertyValue(name).trim();
+    const money = new Intl.NumberFormat("es-UY", { style: "currency", currency: "UYU", maximumFractionDigits: 0 });
+
+    // --- Números que cuentan: de 0 al valor con una curva que frena al final ---
+    function countUp(el) {
+      const target = Number(el.dataset.count) / 100;
+      const duration = 1200;
+      const start = performance.now();
+      const tick = (now) => {
+        const t = Math.min((now - start) / duration, 1);
+        const eased = 1 - Math.pow(1 - t, 3);  // easeOutCubic
+        el.textContent = money.format(target * eased);
+        if (t < 1) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    }
+
+    // --- Barras de progreso: se llenan cuando aparecen en pantalla ---
+    function fillBars() {
+      document.querySelectorAll("[data-fill]").forEach((bar) => {
+        bar.style.width = "0";
+        requestAnimationFrame(() => setTimeout(() => (bar.style.width = bar.dataset.fill + "%"), 150));
+      });
+    }
+
+    // --- Presupuesto de comida por semana ---
+    const weeks = [
+      { label: "1–7 nov", budget: 302500, spent: 450600 },
+      { label: "8–14 nov", budget: 302500, spent: 0 },
+      { label: "15–21 nov", budget: 302500, spent: 0 },
+      { label: "22–28 nov", budget: 302500, spent: 0 },
+      { label: "29–30 nov", budget: 86431, spent: 0 },
+    ];
+    function renderWeeks() {
+      document.getElementById("weeks").innerHTML = weeks.map((w, i) => {
+        const pct = Math.min(w.spent / w.budget * 100, 100);
+        const over = w.spent > w.budget;
+        return `<div>
+          <div class="flex justify-between text-sm mb-1.5"><span class="${i === 0 ? "" : "muted"}">${w.label}</span>
+            <span class="${over ? "text-danger" : "muted"}">${money.format(w.spent / 100)} / ${money.format(w.budget / 100)}</span></div>
+          <div class="bar"><span data-fill="${pct}" style="background:${over ? "var(--danger)" : "var(--primary)"}"></span></div>
+        </div>`;
+      }).join("");
+    }
+
+    // --- Gráficos (Chart.js) ---
+    let donut, bars;
+    function renderCharts() {
+      const categories = [
+        ["Vivienda", 18000, css("--primary")], ["Comida", 4560, css("--accent")],
+        ["Servicios", 2500, css("--cat-3")], ["Suscripciones", 1286, css("--cat-4")],
+      ];
+      donut?.destroy(); bars?.destroy();
+      Chart.defaults.font.family = "Inter";
+      Chart.defaults.color = css("--muted");
+
+      donut = new Chart(document.getElementById("donut"), {
+        type: "doughnut",
+        data: { labels: categories.map(c => c[0]),
+                datasets: [{ data: categories.map(c => c[1]), backgroundColor: categories.map(c => c[2]),
+                             borderColor: css("--surface"), borderWidth: 3, hoverOffset: 6 }] },
+        options: { cutout: "72%", plugins: { legend: { display: false } },
+                   animation: { animateRotate: true, duration: 1200, easing: "easeOutCubic" } },
+      });
+      const total = categories.reduce((s, c) => s + c[1], 0);
+      document.getElementById("legend").innerHTML = categories.map(c => `
+        <li class="flex items-center justify-between"><span class="flex items-center gap-2">
+          <span class="w-2.5 h-2.5 rounded-full" style="background:${c[2]}"></span>${c[0]}</span>
+          <span class="muted">${money.format(c[1])} · ${Math.round(c[1] / total * 100)}%</span></li>`).join("");
+
+      const months = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+      const income = [65000,65000,65000,65000,65000,65000,65000,65000,65000,65000,65000,65000];
+      const spent  = [31000,29500,33800,30200,35100,32900,30400,34600,36200,35000,26346,34500];
+      const future = (i) => i === 11;
+      bars = new Chart(document.getElementById("bars"), {
+        type: "bar",
+        data: { labels: months, datasets: [
+          { label: "Ingresos", data: income, backgroundColor: css("--primary-soft"), borderColor: css("--primary"),
+            borderWidth: 1.5, borderRadius: 6, borderSkipped: false },
+          { label: "Gastos", data: spent, borderRadius: 6, borderSkipped: false,
+            backgroundColor: months.map((_, i) => future(i) ? "transparent" : css("--accent")),
+            borderColor: css("--accent"), borderWidth: months.map((_, i) => future(i) ? 1.5 : 0),
+            borderDash: [4, 3] },
+        ]},
+        options: { maintainAspectRatio: false,
+          plugins: { legend: { position: "bottom", labels: { usePointStyle: true, boxWidth: 8 } },
+                     tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${money.format(c.raw)}` } } },
+          scales: { x: { grid: { display: false } },
+                    y: { grid: { color: css("--border") }, ticks: { callback: (v) => "$ " + v / 1000 + "k" } } },
+          animation: { duration: 1100, easing: "easeOutQuart", delay: (ctx) => ctx.dataIndex * 50 } },
+      });
+    }
+
+    function renderAll() {
+      document.querySelectorAll("[data-count]").forEach(countUp);
+      renderWeeks();
+      fillBars();
+      renderCharts();
+    }
+
+    // --- Controles de la muestra ---
+    document.querySelectorAll("[data-set-palette]").forEach((btn) => btn.addEventListener("click", () => {
+      root.dataset.palette = btn.dataset.setPalette;
+      document.querySelectorAll("[data-set-palette]").forEach(b => b.setAttribute("aria-pressed", b === btn));
+      renderAll();
+    }));
+    document.getElementById("theme-toggle").addEventListener("click", () => {
+      root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
+      renderAll();
+    });
+    const sheetRoot = document.getElementById("sheet-root");
+    document.getElementById("fab").addEventListener("click", () => sheetRoot.classList.add("sheet-open"));
+    sheetRoot.querySelectorAll("[data-close]").forEach(el => el.addEventListener("click", () => sheetRoot.classList.remove("sheet-open")));
+    sheetRoot.querySelectorAll(".cat-btn").forEach(btn => btn.addEventListener("click", () =>
+      sheetRoot.querySelectorAll(".cat-btn").forEach(b => b.setAttribute("aria-pressed", b === btn))));
+
+    lucide.createIcons();
+    renderAll();
+  </script>
+</body>
+</html>

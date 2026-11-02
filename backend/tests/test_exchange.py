@@ -75,6 +75,21 @@ def test_gasto_en_dolares_congela_la_cotizacion(client, auth):
     assert res.json()["exchange_rate"] == 40.0  # la del día del gasto (fuente falsa)
 
 
+def test_editar_fecha_de_gasto_en_dolares_recalcula_cotizacion(client, auth, monkeypatch):
+    gasto = client.post(
+        "/api/expenses",
+        json={"category": "tech", "amount_cents": 2000, "currency": "USD", "date": "2026-03-10"},
+        headers=auth,
+    ).json()
+    monkeypatch.setattr(
+        exchange, "fetch_bcu", lambda until: exchange.RateQuote(rate=42.0, rate_date=until, source="BCU")
+    )
+    res = client.patch(
+        f"/api/expenses/{gasto['id']}", json={"date": "2026-06-10", "exchange_rate": None}, headers=auth
+    )
+    assert res.json()["exchange_rate"] == 42.0
+
+
 def test_endpoint_publico_de_cotizacion(client):
     res = client.get("/api/exchange-rate")
     assert res.status_code == 200

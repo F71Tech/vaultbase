@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="es" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Movimientos · VaultBase</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <script src="/js/theme-init.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.1.11"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  <link rel="stylesheet" href="/css/app.css" />
+</head>
+<body class="min-h-screen">
+  <div class="app-layout mx-auto max-w-6xl px-4 md:flex md:gap-8 pb-28 md:pb-12">
+  <aside id="sidebar" class="hidden"></aside>
+  <main class="flex-1 min-w-0 pt-6 md:pt-8 space-y-5">
+    <header class="rise flex flex-wrap items-center justify-between gap-3">
+      <h1 class="font-display text-3xl font-bold tracking-tight">Movimientos</h1>
+      <div class="flex items-center gap-1 card px-1 py-1" style="box-shadow:none">
+        <button class="btn-icon btn" id="prev-month" aria-label="Mes anterior"><i data-lucide="chevron-left" class="w-5 h-5"></i></button>
+        <span id="month-label" class="font-medium min-w-[9.5rem] text-center"></span>
+        <button class="btn-icon btn" id="next-month" aria-label="Mes siguiente"><i data-lucide="chevron-right" class="w-5 h-5"></i></button>
+      </div>
+    </header>
+
+    <div class="segmented rise" role="tablist" style="animation-delay:.05s">
+      <button data-tab="expenses" aria-pressed="true" role="tab">Gastos</button>
+      <button data-tab="incomes" aria-pressed="false" role="tab">Ingresos</button>
+    </div>
+
+    <!-- ===== Gastos ===== -->
+    <section id="tab-expenses" class="space-y-5">
+      <div class="grid grid-cols-2 gap-3 rise" style="animation-delay:.1s">
+        <div class="card p-4"><div class="muted text-sm mb-1">Gastos del día a día</div>
+          <div class="font-display text-2xl font-bold" id="total-variable">$ 0</div></div>
+        <div class="card p-4"><div class="muted text-sm mb-1">Gastos fijos del mes</div>
+          <div class="font-display text-2xl font-bold" id="total-fixed">$ 0</div></div>
+      </div>
+
+      <div id="category-filter" class="flex gap-2 overflow-x-auto no-scrollbar pb-1 -mx-1 px-1"></div>
+
+      <div class="card p-4 md:p-5 rise" style="animation-delay:.15s">
+        <div class="flex items-center justify-between mb-2">
+          <h2 class="font-display font-semibold text-lg">Fijos de cada mes</h2>
+          <button class="btn btn-ghost text-sm py-2" id="add-fixed"><i data-lucide="plus" class="w-4 h-4"></i>Fijo</button>
+        </div>
+        <div id="fixed-list"></div>
+      </div>
+
+      <div class="card p-4 md:p-5 rise" style="animation-delay:.2s">
+        <div class="flex items-center justify-between mb-2">
+          <h2 class="font-display font-semibold text-lg">Día a día</h2>
+          <button class="btn btn-primary text-sm py-2" id="add-variable"><i data-lucide="plus" class="w-4 h-4"></i>Gasto</button>
+        </div>
+        <div id="variable-list"></div>
+      </div>
+    </section>
+
+    <!-- ===== Ingresos ===== -->
+    <section id="tab-incomes" class="space-y-5" hidden>
+      <div class="card p-4 rise"><div class="muted text-sm mb-1">Ingresos de este mes</div>
+        <div class="font-display text-2xl font-bold text-primary" id="total-income">$ 0</div></div>
+      <div class="card p-4 md:p-5">
+        <div class="flex items-center justify-between mb-2">
+          <h2 class="font-display font-semibold text-lg">Tus ingresos</h2>
+          <button class="btn btn-primary text-sm py-2" id="add-income"><i data-lucide="plus" class="w-4 h-4"></i>Ingreso</button>
+        </div>
+        <div id="income-list"></div>
+      </div>
+    </section>
+  </main>
+  </div>
+  <script type="module" src="/js/pages/movimientos.js"></script>
+</body>
+</html>

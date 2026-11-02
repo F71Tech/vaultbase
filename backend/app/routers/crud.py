@@ -30,9 +30,9 @@ def build_crud_router(
     # campos (ej: la subcategoría debe pertenecer a la categoría final).
     # Debe lanzar ValueError con un mensaje claro si algo no cuadra.
     validate_item=None,
-    # Paso extra antes de guardar un registro nuevo (ej: completar la
-    # cotización del dólar de un gasto en USD). Recibe (item, session).
-    on_create=None,
+    # Paso extra antes de guardar (al crear y al editar), ej: completar la
+    # cotización del dólar de un gasto en USD. Recibe (item, session).
+    before_save=None,
 ) -> APIRouter:
     router = APIRouter(prefix=prefix, tags=[tag])
     nombre = tag.lower()
@@ -57,8 +57,8 @@ def build_crud_router(
     def create_item(data: create_schema, session: SessionDep, user: CurrentUser):
         # El user_id sale del token, nunca de lo que manda el cliente
         item = model.model_validate(data, update={"user_id": user.id})
-        if on_create:
-            on_create(item, session)
+        if before_save:
+            before_save(item, session)
         session.add(item)
         session.commit()
         session.refresh(item)
@@ -81,6 +81,8 @@ def build_crud_router(
                 # a quedar exactamente como estaba en la base de datos
                 session.rollback()
                 raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(error))
+        if before_save:
+            before_save(item, session)
         session.add(item)
         session.commit()
         session.refresh(item)

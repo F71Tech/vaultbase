@@ -1,71 +1,69 @@
 <!doctype html>
-<html lang="es">
+<html lang="es" data-theme="dark">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>VaultBase</title>
-
-  <!-- Tipografías: Inter (texto) y Space Grotesk (títulos y números) -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>VaultBase · Tus finanzas, claras</title>
+  <meta name="description" content="Finanzas personales para Uruguay: gastos, metas, suscripciones, simulador de compras y sueldo líquido." />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <script>
+    // Si ya hay sesión, vamos directo al dashboard
+    try { if (localStorage.getItem("vb-token")) location.replace("/dashboard.html"); } catch (e) {}
+  </script>
+  <script src="/js/theme-init.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet" />
-
-  <!-- Tailwind por CDN (solo durante el desarrollo; en el deploy lo compilamos) -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.1.11"></script>
-
-  <!-- Paleta de VaultBase como "tokens" de Tailwind: bg-ink, text-emerald, etc. -->
-  <style type="text/tailwindcss">
-    @theme {
-      --color-ink: #0B1220;
-      --color-ink-soft: #131C2E;
-      --color-money: #10B981;
-      --color-goal: #F59E0B;
-      --font-sans: "Inter", system-ui, sans-serif;
-      --font-display: "Space Grotesk", "Inter", sans-serif;
-    }
-  </style>
+  <script src="https://cdn.jsdelivr.net/npm/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  <link rel="stylesheet" href="/css/app.css" />
   <style>
-    /* Animación de entrada: el contenido aparece subiendo suavemente */
-    @keyframes rise { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
-    .rise { animation: rise .7s cubic-bezier(.2,.8,.2,1) both; }
-    /* Si el usuario pidió menos movimiento en su sistema, lo respetamos */
-    @media (prefers-reduced-motion: reduce) { .rise { animation: none; } }
+    .glow { position: absolute; inset: -20% -10% auto; height: 70vh; pointer-events: none;
+            background: radial-gradient(closest-side, var(--primary-soft), transparent 70%); filter: blur(10px); }
   </style>
 </head>
-<body class="min-h-screen bg-ink font-sans text-slate-200 antialiased">
-  <main class="mx-auto flex min-h-screen max-w-3xl flex-col items-center justify-center gap-6 px-4 text-center">
-    <span class="rise rounded-full border border-money/30 bg-money/10 px-3 py-1 text-xs font-medium text-money">
-      Etapa 0 · entorno listo
-    </span>
-    <h1 class="rise font-display text-5xl font-bold tracking-tight sm:text-6xl" style="animation-delay:.1s">
-      Vault<span class="text-money">Base</span>
-    </h1>
-    <p class="rise max-w-md text-slate-400" style="animation-delay:.2s">
-      Tus finanzas personales, claras y bajo control. Pronto: dashboard, metas,
-      suscripciones y simulador de compras.
-    </p>
-    <div class="rise flex flex-wrap justify-center gap-3" style="animation-delay:.3s">
-      <a href="/docs" class="rounded-xl bg-money px-5 py-2.5 font-medium text-ink transition hover:-translate-y-0.5 hover:bg-emerald-400">
-        Ver la API (/docs)
-      </a>
-      <span id="status" class="rounded-xl border border-white/10 bg-ink-soft px-5 py-2.5 text-slate-400">
-        Consultando servidor…
-      </span>
-    </div>
-  </main>
+<body class="min-h-screen overflow-x-hidden">
+  <div class="glow" aria-hidden="true"></div>
+  <div class="relative mx-auto max-w-6xl px-4">
+    <header class="flex items-center justify-between py-6">
+      <div class="font-display text-2xl font-bold">Vault<span class="text-primary">Base</span></div>
+      <a href="/login.html" class="btn btn-ghost">Ingresar</a>
+    </header>
 
-  <script>
-    // Le preguntamos al backend si está vivo y mostramos la respuesta.
-    // fetch() hace un pedido HTTP desde el navegador al servidor.
-    fetch("/api/health")
-      .then((res) => res.json())
-      .then((data) => {
-        const el = document.getElementById("status");
-        el.textContent = `Servidor: ${data.status} ✓`;
-        el.classList.add("text-money");
-      })
-      .catch(() => {
-        document.getElementById("status").textContent = "Servidor no responde";
-      });
-  </script>
+    <section class="grid lg:grid-cols-2 gap-12 items-center py-10 lg:py-20">
+      <div>
+        <span class="chip rise mb-5"><span class="text-accent">●</span> Hecho para Uruguay · pesos y dólares</span>
+        <h1 class="rise font-display text-4xl sm:text-6xl font-bold tracking-tight leading-[1.05]" style="animation-delay:.08s">
+          Tu plata, <span class="text-primary">clara</span>.<br />Tus metas, <span class="text-accent">cerca</span>.
+        </h1>
+        <p class="rise muted text-lg mt-6 max-w-lg" style="animation-delay:.16s">
+          Anotá tus gastos en segundos, mirá a dónde se va tu sueldo y simulá
+          una compra antes de hacerla: VaultBase te dice la forma que menos daña tu economía.
+        </p>
+        <div class="rise flex flex-wrap gap-3 mt-8" style="animation-delay:.24s">
+          <a href="/login.html?mode=register" class="btn btn-primary">Crear cuenta gratis <i data-lucide="arrow-right" class="w-4 h-4"></i></a>
+          <a href="/login.html" class="btn btn-ghost">Ya tengo cuenta</a>
+        </div>
+      </div>
+
+      <div class="rise grid grid-cols-2 gap-3" style="animation-delay:.3s">
+        <div class="card p-5 col-span-2">
+          <div class="flex items-center justify-between mb-3"><span class="muted text-sm">Ahorro posible este mes</span>
+            <span class="icon-badge bg-accent-soft text-accent"><i data-lucide="piggy-bank"></i></span></div>
+          <div class="font-display text-4xl font-bold text-accent">$ 29.947</div>
+          <div class="bar mt-4"><span style="width:68%;background:var(--primary)"></span></div>
+        </div>
+        <div class="card p-5"><i data-lucide="zap" class="text-primary mb-3"></i><div class="font-semibold">Gasto rápido</div>
+          <p class="muted text-sm mt-1">El alfajor de hoy, anotado en 3 toques.</p></div>
+        <div class="card p-5"><i data-lucide="calculator" class="text-accent mb-3"></i><div class="font-semibold">Simulador</div>
+          <p class="muted text-sm mt-1">¿Contado, ahorrar o cuotas? Te lo decimos.</p></div>
+        <div class="card p-5"><i data-lucide="repeat" class="text-primary mb-3"></i><div class="font-semibold">Suscripciones</div>
+          <p class="muted text-sm mt-1">Spotify, Claude, Netflix… con dólar del BCU.</p></div>
+        <div class="card p-5"><i data-lucide="wallet" class="text-accent mb-3"></i><div class="font-semibold">Sueldo líquido</div>
+          <p class="muted text-sm mt-1">Nominal → líquido y aguinaldo, a la uruguaya.</p></div>
+      </div>
+    </section>
+    <footer class="muted text-sm py-10 text-center">VaultBase · proyecto de portfolio</footer>
+  </div>
+  <script>lucide.createIcons();</script>
 </body>
 </html>
