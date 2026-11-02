@@ -1,6 +1,7 @@
 // movimientos.js · Lista de gastos (fijos y del día a día) e ingresos, por mes.
 
 import { api } from "../api.js";
+import { commissionAmount, openCommissionSheet, payDateOf } from "../commission-form.js";
 import { openExpenseSheet } from "../expense-form.js";
 import { friendlyDay, money, moneyExact, monthLabel, shortDate, toISO } from "../format.js";
 import { openIncomeSheet } from "../income-form.js";
@@ -11,7 +12,7 @@ import { countUp, esc, icons, onDataChanged } from "../ui.js";
 const now = new Date();
 const view = { year: now.getFullYear(), month: now.getMonth() + 1, tab: "expenses", category: null };
 let cats;
-let cache = { variable: [], fixed: [], incomes: [], summary: null };
+let cache = { variable: [], fixed: [], incomes: [], summary: null, commissions: [], salary: null };
 
 const $ = (id) => document.getElementById(id);
 
@@ -109,20 +110,49 @@ function renderIncomes() {
       </button>`).join("")
     : emptyState("wallet", "Cargá tu sueldo u otros ingresos para que los cálculos funcionen.");
   if (cache.summary) countUp($("total-income"), cache.summary.income_cents);
+  renderCommissions();
   icons();
+}
+
+// Comisiones por semana (solo si tu sueldo tiene comisiones o ya anotaste alguna)
+function renderCommissions() {
+  const { commissions, salary } = cache;
+  $("commissions-card").hidden = !salary && !commissions.length;
+  if ($("commissions-card").hidden) return;
+  const floor = salary?.commission_floor_cents;
+  $("commissions-hint").textContent = floor
+    ? `Las semanas que no anotes cuentan como tu bono mínimo (${money(floor)}). Para planificar se usa el mínimo de cada rango.`
+    : "Para planificar se usa el mínimo de cada rango; cuando sepas el monto real, cargalo.";
+  const day = salary?.pay_day ?? 30;
+  $("commission-list").innerHTML = commissions.length ? commissions.map((c) => `
+    <button class="row" data-commission="${c.id}">
+      <span class="icon-badge bg-primary-soft text-primary"><i data-lucide="${c.actual_cents != null ? "badge-check" : "trending-up"}"></i></span>
+      <span class="flex-1 min-w-0">
+        <span class="block font-medium truncate">Semana del ${shortDate(c.week_start)}</span>
+        <span class="block muted text-xs truncate">${c.note ? `${esc(c.note)} · ` : ""}se cobra el ${shortDate(payDateOf(c.week_start, day))}</span>
+      </span>
+      <span class="text-right">
+        <span class="block font-semibold text-primary">${commissionAmount(c)}</span>
+        <span class="block muted text-xs">${c.actual_cents != null ? "real" : "estimado"}</span>
+      </span>
+    </button>`).join("")
+    : emptyState("trending-up", "Anotá la comisión de cada semana (un rango si no sabés el monto exacto).");
 }
 
 async function load() {
   $("month-label").textContent = monthLabel(view.year, view.month);
   const range = monthRange();
   // Pedimos todo en paralelo (Promise.all) en vez de uno por uno: es más rápido
-  const [monthItems, fixedAll, incomes, summary] = await Promise.all([
+  const [monthItems, fixedAll, incomes, summary, commissions] = await Promise.all([
     api(`/api/expenses?from_date=${range.from}&to_date=${range.to}&kind=variable&kind=one_off`),
     api("/api/expenses?kind=fixed&limit=1000"),
     api("/api/incomes"),
     api(`/api/finance/month?year=${view.year}&month=${view.month}`),
+    api("/api/commissions"),
   ]);
   cache = {
+    commissions,
+    salary: incomes.find((i) => i.commission_floor_cents != null),  // el sueldo con comisiones
     variable: monthItems,
     fixed: fixedAll.filter((e) => activeInMonth(e, "date", range)),
     incomes: incomes.filter((i) => i.frequency === "one_time"
@@ -164,6 +194,9 @@ async function init() {
       openExpenseSheet([...cache.variable, ...cache.fixed].find((x) => x.id === id));
     }
     if (inc) openIncomeSheet(cache.incomes.find((x) => x.id === Number(inc.dataset.income)));
+    const com = t.closest("[data-commission]");
+    if (com) openCommissionSheet(cache.commissions.find((x) => x.id === Number(com.dataset.commission)),
+      { salaryPayDay: cache.salary?.pay_day ?? 30 });
     if (filter) { view.category = filter.dataset.filter || null; renderExpenses(); }
     if (tab) setTab(tab.dataset.tab);
   });
@@ -172,6 +205,7 @@ async function init() {
   $("add-variable").addEventListener("click", () => openExpenseSheet());
   $("add-fixed").addEventListener("click", () => openExpenseSheet(null, { kind: "fixed" }));
   $("add-income").addEventListener("click", () => openIncomeSheet());
+  $("add-commission").addEventListener("click", () => openCommissionSheet(null, { salaryPayDay: cache.salary?.pay_day ?? 30 }));
   onDataChanged(load);
 
   load();

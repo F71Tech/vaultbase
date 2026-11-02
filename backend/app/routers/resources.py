@@ -14,6 +14,7 @@ from sqlmodel import select
 
 from ..deps import CurrentUser, SessionDep
 from ..models import (
+    Commission, CommissionCreate, CommissionRead, CommissionUpdate,
     Currency,
     Expense, ExpenseCategory, ExpenseCreate, ExpenseKind, ExpenseRead, ExpenseUpdate,
     Goal, GoalCreate, GoalRead, GoalUpdate,
@@ -21,6 +22,7 @@ from ..models import (
     Subscription, SubscriptionCreate, SubscriptionRead, SubscriptionUpdate,
     WishItem, WishItemCreate, WishItemRead, WishItemUpdate,
 )
+from ..models.commission import check_range
 from ..models.expense import check_subcategory
 from ..models.income import check_advance
 from ..services.exchange import RateUnavailable, rate_for_date
@@ -47,6 +49,19 @@ incomes_router = build_crud_router(
     order_by=Income.start_date,
     # al editar solo el monto o solo el adelanto, igual hay que revisar los dos juntos
     validate_item=lambda i: check_advance(i.advance_cents, i.amount_cents),
+)
+
+def check_commission(c: Commission) -> None:
+    """Al editar: el rango tiene que tener sentido y la semana empieza el lunes."""
+    check_range(c.min_cents, c.max_cents)
+    c.week_start = c.week_start - dt.timedelta(days=c.week_start.weekday())
+
+
+commissions_router = build_crud_router(
+    model=Commission, create_schema=CommissionCreate, read_schema=CommissionRead,
+    update_schema=CommissionUpdate, prefix="/api/commissions", tag="Comisiones",
+    order_by=Commission.week_start.desc(),
+    validate_item=lambda c: check_commission(c),
 )
 
 goals_router = build_crud_router(

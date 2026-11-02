@@ -34,8 +34,10 @@ AGUINALDO_DAY = {6: 30, 12: 18}
 class CashEvent(BaseModel):
     date: dt.date
     label: str
-    amount_cents: int   # positivo = entra plata, negativo = sale
-    kind: str           # "income" | "advance" | "aguinaldo" | "fixed" | "subscription" | "variable"
+    amount_cents: int   # positivo = entra plata, negativo = sale (escenario prudente)
+    kind: str           # "income" | "advance" | "aguinaldo" | "commission" | "fixed" | "subscription" | "variable" | "one_off"
+    # Solo para montos inciertos (comisiones): el escenario optimista
+    amount_high_cents: int | None = None
 
 
 class MoneyNow(BaseModel):
@@ -48,13 +50,16 @@ class MoneyNow(BaseModel):
     days_left: int                    # días que quedan hasta period_end, contando hoy
     upcoming: list[CashEvent]         # lo que entra y sale hasta tu próximo cobro
     incoming_cents: int
+    incoming_high_cents: int          # igual, si las comisiones vienen altas
+    has_commissions: bool             # hay montos inciertos (rango) en lo que viene
     bills_cents: int                  # positivo
     usual_spending_cents: int         # lo que gastarías hasta tu próximo cobro (a ese ritmo)
     has_spending_history: bool
     usual_daily_cents: int            # tu promedio real por día (para el deslizador)
     free_cents: int                   # plata no comprometida = hoy + cobros - cuentas
     can_save_cents: int
-    save_pct: int                     # % de la plata libre que podés ahorrar
+    can_save_high_cents: int          # lo que podrías ahorrar si las comisiones vienen altas
+    save_pct: int                    # % de la plata libre que podés ahorrar
     daily_spending_cents: int         # cuánto gastar por día
     short_cents: int                  # > 0 si a tu ritmo no llegás a fin de mes
 
@@ -116,6 +121,18 @@ def scheduled_events(data: finance.FinanceData, start: dt.date, end: dt.date, ra
     events = []
     for income in data.incomes:
         events += income_events(income, start, end, rate)
+
+    # Comisiones: se cobran con el sueldo (su día de cobro), en un rango mínimo-máximo
+    com_income = finance.commission_income(data)
+    if com_income is not None:
+        for y, m in months_between(start, end):
+            date = on_day(y, m, com_income.pay_day)
+            if start <= date <= end:
+                low = finance.commissions_in_month(data, y, m)
+                high = finance.commissions_in_month(data, y, m, high=True)
+                if low or high:
+                    events.append(CashEvent(date=date, label="Comisiones", amount_cents=low,
+                                            amount_high_cents=high, kind="commission"))
 
     for e in data.expenses:
         if e.kind != ExpenseKind.fixed:
@@ -220,6 +237,7 @@ def money_now(
     # 2) Lo que falta hasta tu próximo cobro (desde mañana: lo de hoy ya está en el punto 1)
     upcoming = scheduled_events(data, today + dt.timedelta(days=1), period_end, rate)
     incoming = sum(ev.amount_cents for ev in upcoming if ev.amount_cents > 0)
+    incoming_high = sum(ev.amount_high_cents or ev.amount_cents for ev in upcoming if ev.amount_cents >= 0)
     bills = -sum(ev.amount_cents for ev in upcoming if ev.amount_cents < 0)
 
     # Lo que solés gastar en el día a día (o lo que elegiste) en los días que quedan
@@ -238,11 +256,16 @@ def money_now(
         daily = max(free, 0) // days_left   # el máximo para llegar a fin de mes
     save_pct = round(can_save / free * 100) if free > 0 else 0
 
+    can_save_high = max(current + incoming_high - bills - usual, 0)
+
     return MoneyNow(
         received_cents=received, spent_cents=spent, current_cents=current,
         since=since, next_pay=next_pay, period_end=period_end, days_left=days_left, upcoming=upcoming,
-        incoming_cents=incoming, bills_cents=bills, usual_spending_cents=usual,
-        has_spending_history=usual_daily > 0, usual_daily_cents=round(usual_daily), free_cents=free, can_save_cents=can_save,
+        incoming_cents=incoming, incoming_high_cents=incoming_high,
+        has_commissions=any(ev.kind == "commission" for ev in upcoming + so_far),
+        bills_cents=bills, usual_spending_cents=usual,
+        has_spending_history=usual_daily > 0, usual_daily_cents=round(usual_daily), free_cents=free,
+        can_save_cents=can_save, can_save_high_cents=can_save_high,
         save_pct=save_pct, daily_spending_cents=daily, short_cents=short,
     )
 
@@ -267,6 +290,7 @@ class BudgetStep(BaseModel):
     label: str
     amount_cents: int
     kind: str      # como CashEvent.kind, más "goal" (el día de la meta)
+    amount_high_cents: int | None = None   # comisiones: el máximo del rango
 
 
 class BalancePoint(BaseModel):
@@ -299,6 +323,12 @@ class GoalBudget(BaseModel):
     short_before: bool        # True = antes de la fecha ya te quedarías sin plata
     steps: list[BudgetStep]   # lo importante que pasa en el medio (para mostrar)
     series: list[BalancePoint]  # tu saldo día por día (para el gráfico)
+    # Sueldos con comisiones: lo de arriba es el escenario PRUDENTE (lo mínimo
+    # de cada rango). Esto es si las comisiones vienen en el máximo.
+    has_commissions: bool
+    budget_high_cents: int
+    max_daily_high_cents: int
+    max_weekly_high_cents: int
 
 
 def goal_budget(
@@ -321,39 +351,49 @@ def goal_budget(
     cushion = round(per_day * cushion_days)
     start = money_now(data, today, rate).current_cents
     events = scheduled_events(data, today + dt.timedelta(days=1), horizon, rate)
-    by_day: dict[dt.date, int] = {}
-    for ev in events:
-        by_day[ev.date] = by_day.get(ev.date, 0) + ev.amount_cents
 
-    # Recorremos los días UNA vez y guardamos, para cada día, la plata que
-    # entró/salió por eventos (acumulada) y cuántos días de gasto pasaron.
-    days = []                                  # (fecha, eventos acumulados, días de gasto)
-    acc, day, k = 0, today + dt.timedelta(days=1), 0
-    while day <= horizon:
-        acc += by_day.get(day, 0)
-        k += 1
-        days.append((day, acc, k))
-        day += dt.timedelta(days=1)
+    def walk(high: bool):
+        """
+        Recorre los días UNA vez y guarda, para cada día, la plata que entró/salió
+        por eventos (acumulada) y cuántos días de gasto pasaron.
+        high=True: las comisiones en su máximo (escenario optimista).
+        """
+        by_day: dict[dt.date, int] = {}
+        for ev in events:
+            amount = ev.amount_high_cents if high and ev.amount_high_cents is not None else ev.amount_cents
+            by_day[ev.date] = by_day.get(ev.date, 0) + amount
+        days, acc, day, k = [], 0, today + dt.timedelta(days=1), 0
+        while day <= horizon:
+            acc += by_day.get(day, 0)
+            k += 1
+            days.append((day, acc, k))       # (fecha, eventos acumulados, días de gasto)
+            day += dt.timedelta(days=1)
+        return days
 
     def balance(acc, k):
         return start + acc - per_day * k
 
-    lowest_before = min([balance(a, k) for d, a, k in days if d < deadline] + [start])
-    after = [(balance(a, k), d) for d, a, k in days if d >= deadline]
-    lowest_after, lowest_date = min(after)
-    on_deadline = next(balance(a, k) for d, a, k in days if d == deadline)
-    max_for_goal = max(round(lowest_after) - cushion, 0)
-    budget = goal.saved_cents + max_for_goal
-
-    # Tope por día: el gasto diario más alto con el que igual pagás la meta y
-    # nunca bajás del colchón. Para cada día t: start + eventos(t) - meta - s·k ≥ colchón
-    # => s ≤ (start + eventos(t) - meta - colchón) / k. El tope es el menor de todos.
     need = max(goal.target_cents - goal.saved_cents, 0)
     usual_cushion = round(usual * cushion_days)
-    max_daily = min(
-        (start + a - (need if d >= deadline else 0) - usual_cushion) / k for d, a, k in days
-    )
-    max_daily = max(int(max_daily), 0)
+
+    def max_for_goal_and_daily(days):
+        """(lo máximo para la meta, día más justo, saldo ese día, tope de gasto por día)"""
+        lowest_after, lowest_date = min((balance(a, k), d) for d, a, k in days if d >= deadline)
+        # Tope por día: el gasto diario más alto con el que igual pagás la meta y
+        # nunca bajás del colchón. Para cada día t: start + eventos(t) - meta - s·k ≥ colchón
+        # => s ≤ (start + eventos(t) - meta - colchón) / k. El tope es el menor de todos.
+        max_daily = min((start + a - (need if d >= deadline else 0) - usual_cushion) / k for d, a, k in days)
+        return max(round(lowest_after) - cushion, 0), lowest_date, lowest_after, max(int(max_daily), 0)
+
+    days = walk(high=False)                    # escenario prudente: el que manda
+    max_for_goal, lowest_date, lowest_after, max_daily = max_for_goal_and_daily(days)
+    lowest_before = min([balance(a, k) for d, a, k in days if d < deadline] + [start])
+    on_deadline = next(balance(a, k) for d, a, k in days if d == deadline)
+    budget = goal.saved_cents + max_for_goal
+
+    has_commissions = any(ev.kind == "commission" for ev in events)
+    high_max, _, _, high_daily = max_for_goal_and_daily(walk(high=True)) if has_commissions \
+        else (max_for_goal, None, None, max_daily)
 
     # Gráfico: tu saldo si gastás lo que pensás por día y ponés en la meta
     # lo que cuesta (o lo máximo posible, si no alcanza)
@@ -365,8 +405,9 @@ def goal_budget(
 
     # Lo importante para mostrar: cobros, cuentas fijas y puntuales (las
     # suscripciones y los gastos del día a día van resumidos en el texto)
-    steps = [BudgetStep(date=ev.date, label=ev.label, amount_cents=ev.amount_cents, kind=ev.kind)
-             for ev in events if ev.kind in ("income", "advance", "aguinaldo", "fixed", "one_off")]
+    steps = [BudgetStep(date=ev.date, label=ev.label, amount_cents=ev.amount_cents, kind=ev.kind,
+                        amount_high_cents=ev.amount_high_cents)
+             for ev in events if ev.kind in ("income", "advance", "aguinaldo", "commission", "fixed", "one_off")]
     steps.append(BudgetStep(date=deadline, label=goal.name, amount_cents=-max_for_goal, kind="goal"))
     steps.sort(key=lambda s: (s.date, s.kind != "goal"))
 
@@ -379,5 +420,7 @@ def goal_budget(
         max_daily_cents=max_daily, max_weekly_cents=max_daily * 7, goal_spend_cents=spend,
         lowest_date=lowest_date, lowest_cents=round(lowest_after) - spend,
         covers_until=horizon, next_pay=next_pay, short_before=lowest_before < 0,
-        steps=steps, series=series,
+        steps=steps, series=series, has_commissions=has_commissions,
+        budget_high_cents=goal.saved_cents + high_max, max_daily_high_cents=high_daily,
+        max_weekly_high_cents=high_daily * 7,
     )

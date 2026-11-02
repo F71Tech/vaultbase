@@ -35,6 +35,9 @@ class IncomeBase(SQLModel):
     # amount_cents sigue siendo el total del mes: el día de cobro llega el resto.
     advance_cents: int | None = Field(default=None, gt=0)
     advance_day: int | None = Field(default=None, ge=1, le=31)
+    # Sueldos con comisiones semanales: el bono mínimo que cobrás por semana si
+    # la comisión no llega (ej: $ 3.000). None = este ingreso no tiene comisiones.
+    commission_floor_cents: int | None = Field(default=None, ge=0)
 
 
 def check_advance(advance_cents: int | None, amount_cents: int | None) -> None:
@@ -65,7 +68,9 @@ class IncomeRead(IncomeBase):
 
 
 class IncomeUpdate(UpdateSchema):
-    nullable_fields = {"end_date", "nominal_cents", "aguinaldo_cents", "advance_cents", "advance_day"}
+    nullable_fields = {
+        "end_date", "nominal_cents", "aguinaldo_cents", "advance_cents", "advance_day", "commission_floor_cents",
+    }
 
     source: str | None = Field(default=None, min_length=1, max_length=80)
     amount_cents: int | None = Field(default=None, gt=0)
@@ -78,3 +83,4 @@ class IncomeUpdate(UpdateSchema):
     pay_day: int | None = Field(default=None, ge=1, le=31)
     advance_cents: int | None = Field(default=None, gt=0)
     advance_day: int | None = Field(default=None, ge=1, le=31)
+    commission_floor_cents: int | None = Field(default=None, ge=0)

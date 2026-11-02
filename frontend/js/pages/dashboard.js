@@ -38,7 +38,8 @@ async function loadRate() {
 // --- Tu plata hoy ---
 // El backend (services/cashflow.py) hace todas las cuentas; acá solo se dibuja.
 const EVENT_ICON = {
-  income: "banknote", advance: "banknote", aguinaldo: "gift", fixed: "house", subscription: "repeat",
+  income: "banknote", advance: "banknote", aguinaldo: "gift", commission: "trending-up", fixed: "house",
+  subscription: "repeat", one_off: "shopping-bag",
 };
 
 function upcomingList(m) {
@@ -47,7 +48,7 @@ function upcomingList(m) {
       <span class="muted text-xs w-12 shrink-0">${shortDate(e.date)}</span>
       <i data-lucide="${EVENT_ICON[e.kind] ?? "circle"}" class="w-3.5 h-3.5 shrink-0 ${e.amount_cents > 0 ? "text-success" : "muted"}"></i>
       <span class="flex-1 min-w-0 truncate">${esc(e.label)}</span>
-      <span class="tabular-nums ${e.amount_cents > 0 ? "text-success" : ""}">${e.amount_cents > 0 ? "+" : "−"}${money(Math.abs(e.amount_cents))}</span>
+      <span class="tabular-nums ${e.amount_cents > 0 ? "text-success" : ""}">${e.amount_cents > 0 ? "+" : "−"}${money(Math.abs(e.amount_cents))}${e.amount_high_cents && e.amount_high_cents !== e.amount_cents ? ` – ${money(e.amount_high_cents)}` : ""}</span>
     </li>`);
   if (m.upcoming.length > 5) rows.push(`<li class="muted text-xs">y ${m.upcoming.length - 5} más…</li>`);
   if (m.usual_spending_cents) rows.push(`
@@ -91,6 +92,7 @@ function renderMoney() {
           <div class="font-display text-2xl font-bold text-accent" id="money-save">$ 0</div>
           <div class="bar mt-2" style="height:6px"><span data-fill="${m.save_pct}" style="background:var(--accent)"></span></div>
           <div class="muted text-xs mt-1"><b class="text-accent">${m.save_pct}%</b> de tu plata libre (${money(Math.max(m.free_cents, 0))})</div>
+          ${m.can_save_high_cents > m.can_save_cents ? `<div class="text-xs mt-1">Hasta <b class="text-success">${money(m.can_save_high_cents)}</b> si tus comisiones vienen altas</div>` : ""}
         </div>
         ${short ? `<p class="col-span-2 text-sm rounded-xl bg-danger-soft p-3 flex gap-2 items-start">
             <i data-lucide="circle-alert" class="w-4 h-4 text-danger mt-0.5 shrink-0"></i>

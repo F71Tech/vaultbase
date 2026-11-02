@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from pydantic import BaseModel
 
 from ..models import (
-    Currency, Expense, ExpenseKind, Goal, Income, IncomeFrequency, Subscription,
+    Commission, Currency, Expense, ExpenseKind, Goal, Income, IncomeFrequency, Subscription,
     SubscriptionFrequency,
 )
 
@@ -139,6 +139,52 @@ class FinanceData:
     expenses: list[Expense] = field(default_factory=list)
     subscriptions: list[Subscription] = field(default_factory=list)
     goals: list[Goal] = field(default_factory=list)
+    commissions: list[Commission] = field(default_factory=list)
+
+
+# --- Comisiones semanales ---------------------------------------------------
+# Las semanas van de lunes a domingo y se cobran con el sueldo del mes en que
+# TERMINAN (su domingo). Cada semana se cobra lo que sea más alto entre la
+# comisión y el bono mínimo semanal del sueldo.
+
+def commission_income(data: "FinanceData") -> Income | None:
+    """El sueldo que tiene comisiones (el que tiene bono mínimo semanal cargado)."""
+    return next((i for i in data.incomes if i.commission_floor_cents is not None), None)
+
+
+def sundays_in_month(year: int, month: int) -> list[dt.date]:
+    first, last = month_bounds(year, month)
+    day = first + dt.timedelta(days=(6 - first.weekday()) % 7)  # primer domingo
+    result = []
+    while day <= last:
+        result.append(day)
+        day += dt.timedelta(days=7)
+    return result
+
+
+def commissions_in_month(data: "FinanceData", year: int, month: int, high: bool = False) -> int:
+    """
+    Comisiones que se cobran con el sueldo de ese mes.
+    high=False: escenario prudente (el mínimo de cada rango).
+    high=True: escenario optimista (el máximo). Si ya cargaste el monto real, se usa ese.
+    Semanas sin datos: el bono mínimo (lo único seguro).
+    """
+    income = commission_income(data)
+    if income is None and not data.commissions:
+        return 0
+    floor = (income.commission_floor_cents or 0) if income else 0
+    by_week = {c.week_start: c for c in data.commissions}
+    total = 0
+    for sunday in sundays_in_month(year, month):
+        week = by_week.get(sunday - dt.timedelta(days=6))
+        if week is None:
+            # sin anotar: solo cuenta el bono, y solo si el sueldo estaba vigente esa semana
+            if income and income.start_date <= sunday and (income.end_date is None or income.end_date >= sunday):
+                total += floor
+            continue
+        value = week.actual_cents if week.actual_cents is not None else (week.max_cents if high else week.min_cents)
+        total += max(value, floor)
+    return total
 
 
 class MonthSummary(BaseModel):
@@ -164,7 +210,8 @@ def month_summary(
     trata como FUTURO: los gastos variables reales se reemplazan por esa estimación.
     """
     aguinaldo = sum(aguinaldo_in_month(i, year, month, rate) for i in data.incomes)
-    income = sum(income_in_month(i, year, month, rate) for i in data.incomes) + aguinaldo
+    income = (sum(income_in_month(i, year, month, rate) for i in data.incomes) + aguinaldo
+              + commissions_in_month(data, year, month))  # comisiones: escenario prudente
     subs = sum(subscription_in_month(s, year, month, rate) for s in data.subscriptions)
 
     fixed = 0
@@ -295,7 +342,7 @@ def savings_capacity(data: FinanceData, today: dt.date, rate: float | None) -> S
     recurring = sum(
         income_in_month(i, y, m, rate) for i in data.incomes
         if i.frequency != IncomeFrequency.one_time
-    )
+    ) + commissions_in_month(data, y, m)  # comisiones de este mes, escenario prudente
     fixed = sum(
         expense_in_month(e, y, m, rate) for e in data.expenses if e.kind == ExpenseKind.fixed
     ) + sum(subscription_in_month(s, y, m, rate) for s in data.subscriptions)

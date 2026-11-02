@@ -300,7 +300,7 @@ function planIdeas(plan, heading = `Ideas para conseguir los ${money(plan.gap_ce
 // (services/cashflow.py goal_budget): cobros, cuentas, aguinaldo, puntuales y
 // gastos habituales. El usuario puede ajustar el gasto por día y el colchón.
 const STEP_ICON = {
-  income: "banknote", advance: "banknote", aguinaldo: "gift", fixed: "house", one_off: "shopping-bag", goal: "plane",
+  income: "banknote", advance: "banknote", aguinaldo: "gift", commission: "trending-up", fixed: "house", one_off: "shopping-bag", goal: "plane",
 };
 const longDate = (iso) => new Date(iso + "T00:00").toLocaleDateString("es-UY", { day: "numeric", month: "long" });
 const CUSHIONS = [[0, "Sin colchón"], [7, "1 semana"], [14, "2 semanas"]];
@@ -311,7 +311,9 @@ function planBudget(plan) {
   const adjusted = b.daily_cents !== b.usual_daily_cents || b.cushion_days !== 7;
   const verdict = ok
     ? `Tu objetivo es ${money(b.target_cents)}: <b>te alcanza y te sobran ${money(b.difference_cents)}</b>. Si querés, ${esc(plan.name)} puede ser más grande.`
-    : `Tu objetivo es ${money(b.target_cents)}: <b>te faltan ${money(-b.difference_cents)}</b>.`;
+    : b.has_commissions && b.budget_high_cents >= b.target_cents
+      ? `Tu objetivo es ${money(b.target_cents)}: con lo mínimo de tus comisiones <b>te faltan ${money(-b.difference_cents)}</b>, pero <b>si vienen altas, te alcanza</b>.`
+      : `Tu objetivo es ${money(b.target_cents)}: <b>te faltan ${money(-b.difference_cents)}</b>.`;
   const margin = b.max_daily_cents >= b.usual_daily_cents
     ? `Hoy solés gastar unos ${money(b.usual_daily_cents)} por día: <b class="text-success">tenés margen</b>.`
     : `Hoy solés gastar unos ${money(b.usual_daily_cents)} por día: <b class="text-danger">vas a tener que ajustarte</b>.`;
@@ -320,12 +322,12 @@ function planBudget(plan) {
       <div class="rounded-xl p-4 bg-primary-soft">
         <div class="muted text-xs">Podés gastar hasta</div>
         <div class="font-display text-2xl font-bold text-primary">${money(b.max_daily_cents)}</div>
-        <div class="muted text-xs">por día</div>
+        <div class="muted text-xs">por día${b.has_commissions && b.max_daily_high_cents > b.max_daily_cents ? ` · hasta ${money(b.max_daily_high_cents)} si te va bien` : ""}</div>
       </div>
       <div class="rounded-xl p-4 bg-primary-soft">
         <div class="muted text-xs">o sea, hasta</div>
         <div class="font-display text-2xl font-bold text-primary">${money(b.max_weekly_cents)}</div>
-        <div class="muted text-xs">por semana</div>
+        <div class="muted text-xs">por semana${b.has_commissions && b.max_weekly_high_cents > b.max_weekly_cents ? ` · hasta ${money(b.max_weekly_high_cents)} si te va bien` : ""}</div>
       </div>
       <p class="col-span-2 text-xs muted">…hasta el ${longDate(b.covers_until)}, y aun así pagás los ${money(b.target_cents)} de ${esc(plan.name)}
         y te queda el colchón. ${margin}</p>
@@ -343,7 +345,7 @@ function planBudget(plan) {
         <span class="muted text-xs w-14 shrink-0">${shortDate(s.date)}</span>
         <i data-lucide="${STEP_ICON[s.kind] ?? "circle"}" class="w-3.5 h-3.5 shrink-0 ${s.amount_cents > 0 ? "text-success" : "muted"}"></i>
         <span class="flex-1 min-w-0 truncate">${esc(s.label)}</span>
-        <span class="tabular-nums ${s.amount_cents > 0 ? "text-success" : ""}">${s.amount_cents > 0 ? "+" : "−"}${money(Math.abs(s.amount_cents))}</span>
+        <span class="tabular-nums ${s.amount_cents > 0 ? "text-success" : ""}">${s.amount_cents > 0 ? "+" : "−"}${money(Math.abs(s.amount_cents))}${s.amount_high_cents && s.amount_high_cents !== s.amount_cents ? ` – ${money(s.amount_high_cents)}` : ""}</span>
       </li>`).join("");
 
   // El deslizador llega hasta el doble de tu promedio (o un poco más que el tope)
@@ -354,6 +356,8 @@ function planBudget(plan) {
       <span class="font-display text-4xl font-bold text-primary" id="plan-monthly">$ 0</span><span class="muted">para ${esc(plan.name)}</span>
     </div>
     ${b.saved_cents ? `<p class="muted text-xs mt-1">Incluye los ${money(b.saved_cents)} que ya tenés guardados.</p>` : ""}
+    ${b.has_commissions && b.budget_high_cents > b.budget_cents ? `<p class="text-sm mt-1"><i data-lucide="trending-up" class="inline w-3.5 h-3.5 text-success"></i>
+      Si tus comisiones vienen altas: <b class="text-success">hasta ${money(b.budget_high_cents)}</b>. <span class="muted">(Calculamos con el mínimo, para no quedarte corto.)</span></p>` : ""}
     <div class="mt-3 rounded-xl p-3 text-sm flex gap-2 items-start ${ok ? "bg-primary-soft" : "bg-danger-soft"}">
       <i data-lucide="${ok ? "circle-check" : "circle-alert"}" class="w-4 h-4 mt-0.5 shrink-0 ${ok ? "text-success" : "text-danger"}"></i>
       <span>${verdict}</span>

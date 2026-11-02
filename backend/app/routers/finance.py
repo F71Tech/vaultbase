@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field, model_validator
 from sqlmodel import Session, select
 
 from ..deps import CurrentUser, SessionDep
-from ..models import Currency, Expense, Goal, Income, Subscription, User, WishItem
+from ..models import Commission, Currency, Expense, Goal, Income, Subscription, User, WishItem
 from ..models.common import today_uy
 from ..services import cashflow, finance, goal_plan
 from ..services.exchange import RateUnavailable, get_current_rate
@@ -32,7 +32,7 @@ def _load_data(session: Session, user: User) -> finance.FinanceData:
 
     return finance.FinanceData(
         incomes=mine(Income), expenses=mine(Expense),
-        subscriptions=mine(Subscription), goals=mine(Goal),
+        subscriptions=mine(Subscription), goals=mine(Goal), commissions=mine(Commission),
     )
 
 

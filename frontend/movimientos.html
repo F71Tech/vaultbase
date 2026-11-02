@@ -69,6 +69,15 @@
         </div>
         <div id="income-list"></div>
       </div>
+      <!-- Comisiones semanales: solo aparece si tu sueldo tiene comisiones -->
+      <div class="card p-4 md:p-5" id="commissions-card" hidden>
+        <div class="flex items-center justify-between mb-1">
+          <h2 class="font-display font-semibold text-lg">Comisiones por semana</h2>
+          <button class="btn btn-primary text-sm py-2" id="add-commission"><i data-lucide="plus" class="w-4 h-4"></i>Semana</button>
+        </div>
+        <p class="muted text-xs mb-3" id="commissions-hint"></p>
+        <div id="commission-list"></div>
+      </div>
     </section>
   </main>
   </div>

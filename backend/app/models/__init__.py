@@ -4,6 +4,7 @@ Importamos todos los modelos acá para poder escribir, por ejemplo:
 y para que SQLModel conozca todas las tablas al crearlas.
 """
 
+from .commission import Commission, CommissionCreate, CommissionRead, CommissionUpdate
 from .common import Currency
 from .exchange_rate import ExchangeRate
 from .expense import (
