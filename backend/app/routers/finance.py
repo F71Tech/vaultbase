@@ -126,7 +126,7 @@ def overview(session: SessionDep, user: CurrentUser):
             year=finance.year_summary(data, today.year, today, rate),
             food=finance.food_budget(data, capacity, user.food_budget_pct, today, rate),
             goals=finance.project_goals(data.goals, capacity.monthly_savings_cents, today),
-            money=cashflow.money_now(data, user.balance_cents, user.balance_at, today, rate),
+            money=cashflow.money_now(data, today, rate),
         )
     except finance.RateMissing:
         raise _rate_error()

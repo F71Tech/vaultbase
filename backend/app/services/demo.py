@@ -95,8 +95,6 @@ def create_demo_user(session: Session) -> User:
         email=f"demo-{secrets.token_hex(4)}@{DEMO_DOMAIN}", name="Sofía",
         # Contraseña al azar que nadie conoce: a la demo solo se entra con el botón
         hashed_password=hash_password(secrets.token_urlsafe(24)), food_budget_pct=30,
-        # "Tu plata hoy": como si hubiera mirado su cuenta hace 2 días
-        balance_cents=3_850_000, balance_at=utcnow() - dt.timedelta(days=2),
     )
     session.add(user)
     session.commit()

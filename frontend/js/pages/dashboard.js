@@ -2,9 +2,7 @@
 
 import { api } from "../api.js";
 import { openExpenseSheet } from "../expense-form.js";
-import {
-  centsToInput, longToday, money, moneyExact, parseMoney, shortDate, shortRange, todayISO,
-} from "../format.js";
+import { longToday, money, moneyExact, shortDate, shortRange, todayISO } from "../format.js";
 import { openIncomeSheet } from "../income-form.js";
 import { categoryLabel, CATEGORY_COLOR, EXTRA_CATEGORY_LABELS, getCategories } from "../labels.js";
 import { mountShell } from "../shell.js";
@@ -64,23 +62,10 @@ function upcomingList(m) {
 function renderMoney() {
   const m = overview.money;
   const box = $("money");
-  if (!m.has_balance) {
-    box.innerHTML = `
-      <div class="flex flex-col md:flex-row md:items-center gap-4">
-        <span class="icon-badge bg-primary-soft text-primary" style="width:52px;height:52px"><i data-lucide="wallet"></i></span>
-        <div class="flex-1">
-          <h2 class="font-display text-xl font-bold">¿Cuánta plata tenés hoy?</h2>
-          <p class="muted">Sumá tus cuentas y el efectivo. Con eso te digo cuánto podés gastar por día y cuánto ahorrar hasta fin de mes.</p>
-        </div>
-        <button class="btn btn-primary" data-balance><i data-lucide="plus" class="w-4 h-4"></i>Cargar mi saldo</button>
-      </div>`;
-    return;
-  }
+  // Cuenta nueva sin movimientos: no hay nada que mostrar todavía
+  box.hidden = !m.received_cents && !m.spent_cents && !m.upcoming.length;
+  if (box.hidden) return;
   const end = shortDate(m.month_end);
-  const since = [
-    m.since_income_cents ? `<span class="text-success">+${money(m.since_income_cents)}</span>` : "",
-    m.since_spent_cents ? `−${money(m.since_spent_cents)}` : "",
-  ].filter(Boolean).join(" · ");
   const short = m.short_cents > 0;
 
   box.innerHTML = `
@@ -88,8 +73,10 @@ function renderMoney() {
       <div>
         <div class="flex items-center gap-2 muted text-sm"><i data-lucide="wallet" class="w-4 h-4"></i>Tu plata hoy</div>
         <div class="font-display text-4xl font-bold mt-1 ${m.current_cents < 0 ? "text-danger" : ""}" id="money-current">$ 0</div>
-        <p class="muted text-xs mt-1">Cargaste ${money(m.balance_cents)} el ${shortDate(m.balance_date)}${since ? ` · desde entonces ${since}` : ""}</p>
-        <button class="btn btn-ghost text-sm mt-3" data-balance><i data-lucide="refresh-cw" class="w-4 h-4"></i>Actualizar saldo</button>
+        <div class="text-xs mt-2 space-y-0.5">
+          <div class="flex justify-between gap-3"><span class="muted">Te entró este mes</span><span class="text-success">+${money(m.received_cents)}</span></div>
+          <div class="flex justify-between gap-3"><span class="muted">Gastaste hasta hoy</span><span>−${money(m.spent_cents)}</span></div>
+        </div>
       </div>
 
       <div class="grid grid-cols-2 gap-3 content-start">
@@ -118,44 +105,6 @@ function renderMoney() {
   countUp($("money-current"), m.current_cents);
   countUp($("money-daily"), m.daily_spending_cents);
   countUp($("money-save"), m.can_save_cents);
-}
-
-let balanceSheet;
-function openBalanceSheet() {
-  balanceSheet ??= createSheet(`
-    <form id="balance-form" novalidate>
-      <h3 class="font-display text-xl font-bold mb-1">¿Cuánta plata tenés hoy?</h3>
-      <p class="muted text-sm">Sumá tus cuentas y el efectivo. Si estás en rojo, poné el número con un "-" adelante.</p>
-      <input id="bs-amount" class="amount-input my-5" inputmode="decimal" placeholder="0" aria-label="Saldo de hoy" autofocus />
-      <p class="muted text-xs mb-4">Desde ahora, VaultBase resta los gastos que anotes y suma tus cobros (sueldo, adelanto) en su día.
-        Cuando quieras, lo actualizás mirando tu cuenta.</p>
-      <p class="form-error mb-2" id="bs-error"></p>
-      <button class="btn btn-primary w-full">Guardar</button>
-      <button type="button" class="btn btn-ghost w-full mt-2 text-sm" id="bs-clear">Dejar de usar "Tu plata hoy"</button>
-    </form>`, { label: "Saldo de hoy" });
-  const q = (s) => balanceSheet.el.querySelector(s);
-  if (!balanceSheet.ready) {
-    balanceSheet.ready = true;
-    const save = async (value, message) => {
-      await api("/api/users/me", { method: "PATCH", body: { balance_cents: value } });
-      toast(message);
-      balanceSheet.close();
-      notifyDataChanged();
-    };
-    q("#balance-form").addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const value = parseMoney(q("#bs-amount").value);
-      if (value === null) return (q("#bs-error").textContent = "Escribí un monto (ej: 25.000).");
-      await save(value, "Saldo actualizado");
-    });
-    q("#bs-clear").addEventListener("click", () => save(null, "Listo, ya no se usa tu saldo"));
-  }
-  const m = overview.money;
-  // Precargamos el saldo estimado, redondeado a pesos (sin centésimos)
-  q("#bs-amount").value = m.has_balance ? centsToInput(Math.round(m.current_cents / 100) * 100) : "";
-  q("#bs-clear").hidden = !m.has_balance;
-  q("#bs-error").textContent = "";
-  balanceSheet.open();
 }
 
 // --- Tarjetas de arriba ---
@@ -355,9 +304,7 @@ async function init() {
   $("today").textContent = longToday();
   cats = await getCategories();
   $("onboard-income").addEventListener("click", () => openIncomeSheet());
-  $("food-pct").addEventListener("click", openFoodSheet);
-  $("money").addEventListener("click", (e) => { if (e.target.closest("[data-balance]")) openBalanceSheet(); });
-  onDataChanged(load);
+  $("food-pct").addEventListener("click", openFoodSheet);  onDataChanged(load);
   document.addEventListener("vb:theme", renderCharts);  // los colores del gráfico cambian con el tema
   loadRate();
   load();
