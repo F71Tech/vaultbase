@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="es" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Suscripciones · VaultBase</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <script src="/js/theme-init.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.1.11"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  <link rel="stylesheet" href="/css/app.css" />
+  <style>
+    /* Interruptor activo/pausado */
+    .switch { width: 44px; height: 26px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border);
+              position: relative; transition: background-color .25s; flex-shrink: 0; }
+    .switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%;
+                     background: var(--muted); transition: transform .25s var(--ease), background-color .25s; }
+    .switch[aria-checked="true"] { background: var(--primary-soft); border-color: var(--primary); }
+    .switch[aria-checked="true"]::after { transform: translateX(18px); background: var(--primary); }
+    .avatar { width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center;
+              font-family: var(--font-display); font-weight: 700; font-size: 1.1rem; flex-shrink: 0; }
+  </style>
+</head>
+<body class="min-h-screen">
+  <div class="app-layout mx-auto max-w-6xl px-4 md:flex md:gap-8 pb-28 md:pb-12">
+  <aside id="sidebar" class="hidden"></aside>
+  <main class="flex-1 min-w-0 pt-6 md:pt-8 space-y-5 md:space-y-6">
+    <header class="rise flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <h1 class="font-display text-3xl font-bold tracking-tight">Suscripciones</h1>
+        <p class="muted" id="rate-note">Las que cobran en dólares se convierten con la cotización del BCU.</p>
+      </div>
+      <button class="btn btn-primary" id="add-sub"><i data-lucide="plus" class="w-4 h-4"></i>Nueva</button>
+    </header>
+
+    <section class="grid grid-cols-2 lg:grid-cols-4 gap-3 rise" style="animation-delay:.05s">
+      <div class="card p-4"><div class="muted text-sm mb-1">Por mes</div>
+        <div class="font-display text-2xl font-bold text-primary" id="sum-month">$ 0</div></div>
+      <div class="card p-4"><div class="muted text-sm mb-1">Por año</div>
+        <div class="font-display text-2xl font-bold" id="sum-year">$ 0</div></div>
+      <div class="card p-4"><div class="muted text-sm mb-1">De tu ingreso</div>
+        <div class="font-display text-2xl font-bold text-accent" id="sum-pct">0%</div></div>
+      <div class="card p-4"><div class="muted text-sm mb-1">Activas</div>
+        <div class="font-display text-2xl font-bold" id="sum-count">0</div></div>
+    </section>
+
+    <section class="grid lg:grid-cols-5 gap-4">
+      <div class="card p-4 md:p-5 lg:col-span-3 rise" style="animation-delay:.1s">
+        <h2 class="font-display font-semibold text-lg mb-2">Tus suscripciones</h2>
+        <div id="sub-list"></div>
+      </div>
+      <div class="card p-4 md:p-5 lg:col-span-2 rise" style="animation-delay:.15s">
+        <h2 class="font-display font-semibold text-lg mb-3">Próximos cobros</h2>
+        <ol id="upcoming" class="border-l ml-2 space-y-4" style="border-color:var(--border)"></ol>
+      </div>
+    </section>
+  </main>
+  </div>
+  <script type="module" src="/js/pages/suscripciones.js"></script>
+</body>
+</html>

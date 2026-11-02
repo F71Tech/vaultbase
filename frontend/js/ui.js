@@ -42,6 +42,10 @@ export function countUp(el, cents, format = money) {
   const from = Number(el.dataset.value || 0);
   el.dataset.value = cents;
   if (reducedMotion()) { el.textContent = format(cents); return; }
+  // Reinicia el efecto de "desenfoque que se aclara" (clase .counting en app.css)
+  el.classList.remove("counting");
+  void el.offsetWidth;  // truco: fuerza al navegador a "olvidar" la animación anterior
+  el.classList.add("counting");
   const duration = 1100;
   const start = performance.now();
   const tick = (now) => {
@@ -118,6 +122,56 @@ export function confirmDialog(message, { confirmText = "Borrar" } = {}) {
     });
     sheet.open();
   });
+}
+
+// --- Brillo que sigue al mouse en las tarjetas ---
+// Guardamos la posición del mouse dentro de la tarjeta en variables CSS
+// (--mx, --my) y el CSS dibuja ahí un degradado suave.
+document.addEventListener("pointermove", (e) => {
+  const card = e.target.closest?.("main .card");
+  if (!card) return;
+  const r = card.getBoundingClientRect();
+  card.style.setProperty("--mx", `${e.clientX - r.left}px`);
+  card.style.setProperty("--my", `${e.clientY - r.top}px`);
+}, { passive: true });
+
+// --- Celebración: una pequeña lluvia de papelitos (meta cumplida) ---
+export function celebrate(originEl) {
+  if (reducedMotion()) return;
+  const canvas = document.createElement("canvas");
+  canvas.style.cssText = "position:fixed;inset:0;pointer-events:none;z-index:70";
+  canvas.width = innerWidth * devicePixelRatio;
+  canvas.height = innerHeight * devicePixelRatio;
+  document.body.append(canvas);
+  const ctx = canvas.getContext("2d");
+  ctx.scale(devicePixelRatio, devicePixelRatio);
+
+  const box = originEl?.getBoundingClientRect() ?? { left: innerWidth / 2, top: innerHeight / 2, width: 0, height: 0 };
+  const x0 = box.left + box.width / 2;
+  const y0 = box.top + box.height / 2;
+  const colors = [css("--primary"), css("--accent"), "#FFFFFF"];
+  // Cada papelito tiene posición, velocidad, giro y color al azar
+  const bits = Array.from({ length: 70 }, () => ({
+    x: x0, y: y0, vx: (Math.random() - 0.5) * 9, vy: -Math.random() * 9 - 3,
+    size: 4 + Math.random() * 5, rot: Math.random() * 6, vr: (Math.random() - 0.5) * 0.3,
+    color: colors[Math.floor(Math.random() * colors.length)],
+  }));
+  const start = performance.now();
+  (function frame(now) {
+    const t = (now - start) / 1000;
+    ctx.clearRect(0, 0, innerWidth, innerHeight);
+    for (const b of bits) {
+      b.vy += 0.25;            // gravedad
+      b.x += b.vx; b.y += b.vy; b.rot += b.vr;
+      ctx.save();
+      ctx.globalAlpha = Math.max(1 - t / 1.8, 0);  // se desvanecen
+      ctx.translate(b.x, b.y); ctx.rotate(b.rot);
+      ctx.fillStyle = b.color;
+      ctx.fillRect(-b.size / 2, -b.size / 4, b.size, b.size / 2);
+      ctx.restore();
+    }
+    if (t < 1.8) requestAnimationFrame(frame); else canvas.remove();
+  })(start);
 }
 
 /** Avisa a toda la página que cambiaron los datos (para que se refresque). */

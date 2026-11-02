@@ -6,7 +6,9 @@ import { longToday, money, moneyExact, shortDate, shortRange, todayISO } from ".
 import { openIncomeSheet } from "../income-form.js";
 import { categoryLabel, CATEGORY_COLOR, EXTRA_CATEGORY_LABELS, getCategories } from "../labels.js";
 import { mountShell } from "../shell.js";
-import { countUp, css, esc, fillBars, icons, onDataChanged } from "../ui.js";
+import {
+  countUp, createSheet, css, esc, fillBars, icons, notifyDataChanged, onDataChanged, toast,
+} from "../ui.js";
 
 const $ = (id) => document.getElementById(id);
 const MONTHS = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
@@ -141,7 +143,7 @@ function renderGoals() {
 // --- Comida por semana ---
 function renderFood() {
   const f = overview.food;
-  $("food-pct").textContent = `${f.percentage}% del disponible`;
+  $("food-pct").innerHTML = `${f.percentage}% del disponible <i data-lucide="pencil" class="w-3 h-3"></i>`;
   countUp($("food-remaining"), f.remaining_cents);
   $("food-remaining").classList.toggle("text-danger", f.remaining_cents < 0);
   $("food-caption").textContent = f.remaining_cents < 0
@@ -179,6 +181,38 @@ async function renderToday() {
   icons();
 }
 
+// --- Cambiar el % de comida (se guarda en tu perfil) ---
+let foodSheet;
+function openFoodSheet() {
+  const disposable = Math.max(overview.capacity.disposable_income_cents, 0);
+  foodSheet ??= createSheet(`
+    <h3 class="font-display text-xl font-bold mb-1">Presupuesto de comida</h3>
+    <p class="muted text-sm mb-5">Qué parte de tu ingreso disponible (ingresos − fijos) querés destinar a comida.</p>
+    <div class="text-center mb-2"><span class="font-display text-5xl font-bold text-primary" id="fs-pct"></span></div>
+    <div class="text-center muted mb-5" id="fs-amount"></div>
+    <input type="range" min="5" max="70" step="1" id="fs-range" class="w-full mb-6" style="accent-color:var(--primary)" aria-label="Porcentaje" />
+    <button class="btn btn-primary w-full" id="fs-save">Guardar</button>`, { label: "Presupuesto de comida" });
+  const q = (s) => foodSheet.el.querySelector(s);
+  const update = () => {
+    const pct = Number(q("#fs-range").value);
+    q("#fs-pct").textContent = `${pct}%`;
+    q("#fs-amount").textContent = `${money((disposable * pct) / 100)} por mes · ${money((disposable * pct) / 100 / 4.33)} por semana`;
+  };
+  if (!foodSheet.ready) {
+    foodSheet.ready = true;
+    q("#fs-range").addEventListener("input", update);
+    q("#fs-save").addEventListener("click", async () => {
+      await api("/api/users/me", { method: "PATCH", body: { food_budget_pct: Number(q("#fs-range").value) } });
+      toast("Presupuesto de comida actualizado");
+      foodSheet.close();
+      notifyDataChanged();
+    });
+  }
+  q("#fs-range").value = overview.food.percentage;
+  update();
+  foodSheet.open();
+}
+
 async function load() {
   overview = await api("/api/finance/overview");
   renderStats();
@@ -194,6 +228,7 @@ async function init() {
   $("today").textContent = longToday();
   cats = await getCategories();
   $("onboard-income").addEventListener("click", () => openIncomeSheet());
+  $("food-pct").addEventListener("click", openFoodSheet);
   onDataChanged(load);
   document.addEventListener("vb:theme", renderCharts);  // los colores del gráfico cambian con el tema
   loadRate();

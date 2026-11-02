@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="es" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Simulador · VaultBase</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <script src="/js/theme-init.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.1.11"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  <link rel="stylesheet" href="/css/app.css" />
+</head>
+<body class="min-h-screen">
+  <div class="app-layout mx-auto max-w-6xl px-4 md:flex md:gap-8 pb-28 md:pb-12">
+  <aside id="sidebar" class="hidden"></aside>
+  <main class="flex-1 min-w-0 pt-6 md:pt-8 space-y-5 md:space-y-6">
+    <header class="rise">
+      <h1 class="font-display text-3xl font-bold tracking-tight">Simulador de compras</h1>
+      <p class="muted">"Si compro esto, ¿cómo me afecta?" — y la forma que menos daña tu economía.</p>
+    </header>
+
+    <section class="grid lg:grid-cols-5 gap-4 items-start">
+      <!-- Formulario -->
+      <form id="sim-form" class="card p-5 lg:col-span-2 space-y-4 rise" style="animation-delay:.05s" novalidate>
+        <div class="flex items-center justify-between">
+          <h2 class="font-display font-semibold text-lg">¿Qué querés comprar?</h2>
+          <div class="segmented" role="group" aria-label="Moneda">
+            <button type="button" data-currency="UYU" aria-pressed="true">$U</button>
+            <button type="button" data-currency="USD" aria-pressed="false">US$</button>
+          </div>
+        </div>
+        <label class="field"><span>Qué es (opcional)</span><input id="sim-name" class="input" maxlength="80" placeholder="Ej: Notebook" /></label>
+        <label class="field"><span>Precio</span><input id="sim-price" class="input text-lg font-semibold" inputmode="decimal" placeholder="Ej: 45.000" /></label>
+
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-sm muted font-medium">Cuotas a comparar</span>
+            <button type="button" id="add-installment" class="text-sm text-primary font-medium inline-flex items-center gap-1">
+              <i data-lucide="plus" class="w-4 h-4"></i>Con interés</button>
+          </div>
+          <div class="flex flex-wrap gap-2 mb-2" id="free-installments"></div>
+          <div id="interest-rows" class="space-y-2"></div>
+        </div>
+
+        <p class="form-error" id="sim-error"></p>
+        <div class="flex gap-2">
+          <button class="btn btn-primary flex-1" id="sim-run"><i data-lucide="sparkles" class="w-4 h-4"></i>Simular</button>
+          <button type="button" class="btn btn-ghost" id="save-wish" title="Guardar en mi lista"><i data-lucide="bookmark-plus" class="w-4 h-4"></i></button>
+        </div>
+      </form>
+
+      <!-- Resultados -->
+      <div class="lg:col-span-3 space-y-4" id="results">
+        <div class="card p-8 text-center muted rise" style="animation-delay:.1s">
+          <i data-lucide="calculator" class="w-12 h-12 mx-auto mb-4 text-primary"></i>
+          <p>Poné un precio y tocá <b>Simular</b>. Vas a ver cómo cambia tu mes, tu año y tus metas con cada forma de pago.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Compras deseadas -->
+    <section class="card p-5 rise" style="animation-delay:.15s">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="font-display font-semibold text-lg">Mi lista de deseos</h2>
+        <span class="muted text-sm" id="wish-total"></span>
+      </div>
+      <div id="wish-list" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3"></div>
+    </section>
+  </main>
+  </div>
+  <script type="module" src="/js/pages/simulador.js"></script>
+</body>
+</html>
