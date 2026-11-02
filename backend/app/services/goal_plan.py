@@ -20,6 +20,7 @@ from pydantic import BaseModel
 from ..categories import is_discretionary, spending_label
 from ..models import ExpenseKind, Goal
 from . import finance
+from .cashflow import AGUINALDO_DAY
 
 MAX_MILESTONES = 12        # más de 12 hitos no se leen: salteamos meses
 SUGGESTED_MONTHS = 12      # sin fecha ni ahorro: proponemos llegar en un año
@@ -42,6 +43,9 @@ class PlanTip(BaseModel):
     title: str
     detail: str
     amount_cents: int | None = None   # el número protagonista del consejo
+    # Cuánto ayuda POR MES a cerrar la diferencia (para poder sumar las ideas).
+    # None = no se puede calcular (ej: "revisá tus suscripciones").
+    monthly_cents: int | None = None
 
 
 class GoalPlan(BaseModel):
@@ -59,8 +63,14 @@ class GoalPlan(BaseModel):
     months: int
     finish_year: int
     finish_month: int
-    current_contribution_cents: int
+    current_contribution_cents: int   # lo que hoy le toca a esta meta de tu ahorro mensual
     gap_cents: int                    # cuánto le falta al aporte actual para cumplir el plan
+    deadline: dt.date | None          # la fecha límite exacta que puso el usuario
+    monthly_savings_cents: int        # lo que te sobra por mes en total (sueldo - gastos)
+    other_goals: int                  # cuántas OTRAS metas sin cumplir comparten ese ahorro
+    # Cuándo llegás si no cambiás nada (None = con lo de hoy no llegás nunca)
+    current_finish_year: int | None
+    current_finish_month: int | None
     milestones: list[Milestone]
     tips: list[PlanTip]
 
@@ -173,17 +183,27 @@ def goal_plan(data: finance.FinanceData, goal: Goal, today: dt.date, rate: float
         weekly_cents=math.ceil(monthly * 12 / 52), daily_cents=math.ceil(monthly * 12 / 365),
         months=months, finish_year=finish_y, finish_month=finish_m,
         current_contribution_cents=contribution, gap_cents=gap,
+        deadline=goal.deadline,
+        monthly_savings_cents=max(capacity.monthly_savings_cents, 0),
+        other_goals=sum(1 for gid, q in projections.items() if gid != goal.id and q.remaining_cents > 0),
+        current_finish_year=p.estimated_date.year if p.estimated_date and remaining else None,
+        current_finish_month=p.estimated_date.month if p.estimated_date and remaining else None,
         milestones=build_milestones(data, goal, monthly, months, today, rate) if remaining else [],
         tips=tips,
     )
 
 
 def _tips(data, goal, p, projections, capacity, monthly, months, gap, today, rate) -> list[PlanTip]:
-    """Ideas para cerrar la diferencia entre lo que hace falta y lo que se aporta hoy."""
+    """
+    Ideas para conseguir lo que falta por mes (gap). Cada una dice cuánto
+    aporta por mes (monthly_cents), así el usuario puede sumarlas y ver si alcanza.
+    Textos en lenguaje simple: "gastá $ 800 menos en X", no porcentajes sueltos.
+    """
     tips = []
+    contribution = p.monthly_contribution_cents
 
-    # a) Si tu ahorro alcanza (sacando lo que ya va a OTRAS metas con aporte fijo),
-    #    alcanza con fijarle el aporte a esta meta.
+    # a) Darle más de tu ahorro a esta meta (hoy se reparte entre todas).
+    #    Lo que ya va FIJO a otras metas no se toca.
     others_fixed = sum(
         q.monthly_contribution_cents for gid, q in projections.items()
         if gid != goal.id and q.contribution_is_manual and q.remaining_cents > 0
@@ -191,43 +211,45 @@ def _tips(data, goal, p, projections, capacity, monthly, months, gap, today, rat
     available = capacity.monthly_savings_cents - others_fixed
     if available >= monthly:
         tips.append(PlanTip(
-            kind="set_contribution", amount_cents=monthly,
-            title=f"Fijale un aporte de {money(monthly)} por mes",
-            detail="Tu ahorro mensual alcanza: hoy se reparte entre varias metas. "
-                   "Fijando el aporte, esta meta tiene su parte asegurada.",
+            kind="set_contribution", amount_cents=monthly, monthly_cents=gap,
+            title=f"Destiná {money(monthly)} por mes a esta meta",
+            detail=f"Te sobran {money(capacity.monthly_savings_cents)} por mes, pero hoy se reparten entre "
+                   "todas tus metas. Si a esta le das su parte fija, llegás a tiempo.",
         ))
         return tips  # con esto alcanza; no hace falta recortar nada
 
     shortfall = monthly - max(available, 0)  # lo que no sale de tu ahorro actual
-
-    # Primero, lo que sí se puede: darle a esta meta todo el ahorro disponible.
-    # (Los recortes de abajo cubren solo lo que falta DESPUÉS de esto.)
-    if available > p.monthly_contribution_cents:
+    if available > contribution:
         tips.append(PlanTip(
-            kind="set_contribution", amount_cents=available,
-            title=f"Subí el aporte a {money(available)} por mes",
-            detail=f"Es todo lo que hoy podés ahorrar. Aun así faltarían {money(shortfall)} por mes: "
-                   "estas ideas cubren esa parte.",
+            kind="set_contribution", amount_cents=available, monthly_cents=available - contribution,
+            title=f"Destiná todo tu ahorro a esta meta ({money(available)} por mes)",
+            detail=("Es todo lo que te sobra por mes" + (
+                f", sacando los {money(others_fixed)} que ya van fijos a otras metas" if others_fixed else ""
+            ) + ". Las otras metas esperarían un poco."),
         ))
 
-    # b) Aguinaldo: usar la mitad del próximo baja el aporte de todos los meses.
+    # b) Aguinaldo: poner la mitad del próximo baja lo que hay que juntar cada mes.
+    # Solo si se cobra ANTES de la fecha límite (si vence el 1/12, el del 18/12 llega tarde)
     nxt = finance.next_aguinaldo(data, today, rate)
-    if nxt and nxt[0] < months:
+    if nxt:
         offset, amount = nxt
-        share = amount // AGUINALDO_SHARE
         y, m = finance.add_months(today.year, today.month, offset)
+        pay_date = dt.date(y, m, AGUINALDO_DAY[m])
+        on_time = pay_date <= goal.deadline if goal.deadline else offset <= months
+    if nxt and on_time:
+        share = amount // AGUINALDO_SHARE
         if share >= p.remaining_cents:
             tips.append(PlanTip(
-                kind="aguinaldo", amount_cents=p.remaining_cents,
-                title=f"Con la mitad del aguinaldo de {month_name(y, m)} la cumplís",
-                detail=f"Te faltan {money(p.remaining_cents)} y medio aguinaldo son unos {money(share)}.",
+                kind="aguinaldo", amount_cents=p.remaining_cents, monthly_cents=gap,
+                title=f"Usá parte del aguinaldo de {month_name(y, m)}",
+                detail=f"Te faltan {money(p.remaining_cents)} y con medio aguinaldo ({money(share)}) ya la cumplís.",
             ))
         else:
             new_monthly = math.ceil((p.remaining_cents - share) / months)
             tips.append(PlanTip(
-                kind="aguinaldo", amount_cents=share,
-                title=f"Poné la mitad del aguinaldo de {month_name(y, m)} ({money(share)})",
-                detail=f"El aporte necesario baja de {money(monthly)} a {money(new_monthly)} por mes.",
+                kind="aguinaldo", amount_cents=share, monthly_cents=monthly - new_monthly,
+                title=f"Usá la mitad del aguinaldo de {month_name(y, m)} ({money(share)})",
+                detail=f"Así ya no necesitás juntar {money(monthly)} por mes, sino {money(new_monthly)}.",
             ))
 
     # c) Recortes: solo en gastos recortables, empezando por donde más gastás.
@@ -236,20 +258,15 @@ def _tips(data, goal, p, projections, capacity, monthly, months, gap, today, rat
         if avg <= 0:
             continue
         pct = math.ceil(shortfall / avg * 100)
-        if pct <= MAX_CUT_PCT:
-            tips.append(PlanTip(
-                kind="cut", amount_cents=shortfall,
-                title=f"Gastá {pct}% menos en {label}",
-                detail=f"Hoy gastás unos {money(avg)} por mes en {label}. "
-                       f"Bajando {money(shortfall)} cerrás la diferencia.",
-            ))
-            break  # un solo recorte que alcanza es más claro que tres a medias
-        freed = avg * 20 // 100
+        cut = shortfall if pct <= MAX_CUT_PCT else avg * 20 // 100
         tips.append(PlanTip(
-            kind="cut", amount_cents=freed,
-            title=f"Recortá 20% en {label}",
-            detail=f"Gastás unos {money(avg)} por mes ahí: liberás {money(freed)} por mes.",
+            kind="cut", amount_cents=cut, monthly_cents=cut,
+            title=f"Gastá {money(cut)} menos por mes en {label}",
+            detail=f"Hoy gastás unos {money(avg)} por mes ahí: sería un "
+                   f"{pct if pct <= MAX_CUT_PCT else 20}% menos.",
         ))
+        if pct <= MAX_CUT_PCT:
+            break  # un solo recorte que alcanza es más claro que tres a medias
 
     # d) Suscripciones: suelen ser plata "invisible".
     y, m = today.year, today.month
@@ -257,15 +274,17 @@ def _tips(data, goal, p, projections, capacity, monthly, months, gap, today, rat
     if subs:
         tips.append(PlanTip(
             kind="subscriptions", amount_cents=subs,
-            title=f"Revisá tus suscripciones ({money(subs)}/mes)",
-            detail="Pausar alguna que no uses tanto, aunque sea mientras juntás para esta meta, también suma.",
+            title="Revisá tus suscripciones",
+            detail=f"Pagás {money(subs)} por mes en total. Pausar alguna que no uses tanto, "
+                   "aunque sea mientras juntás, también suma.",
         ))
 
-    # e) Si ya aportás algo pero no llegás a la fecha: ¿y si la movés?
+    # e) La alternativa: no cambiar nada y llegar un poco más tarde.
     if goal.deadline and p.estimated_date:
         tips.append(PlanTip(
             kind="extend",
-            title=f"O mové la fecha a {month_name(p.estimated_date.year, p.estimated_date.month)}",
-            detail=f"Con lo que hoy le aportás ({money(p.monthly_contribution_cents)}/mes) llegás ahí sin cambiar nada.",
+            title=f"Mover la fecha a {month_name(p.estimated_date.year, p.estimated_date.month)}",
+            detail=f"Ahorrando lo que hoy te sobra para esta meta ({money(contribution)} por mes), "
+                   "sin recortar nada, llegás en esa fecha.",
         ))
     return tips

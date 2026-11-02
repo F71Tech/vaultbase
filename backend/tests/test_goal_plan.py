@@ -54,7 +54,7 @@ def test_si_no_alcanza_sugiere_aguinaldo_recortes_y_fecha():
     assert [t.kind for t in plan.tips] == ["aguinaldo", "cut", "subscriptions", "extend"]
     aguinaldo = plan.tips[0]
     assert aguinaldo.amount_cents == 1_500_000 and "diciembre 2026" in aguinaldo.title
-    assert plan.tips[1].title == "Recortá 20% en Delivery"
+    assert plan.tips[1].title == "Gastá $ 2.000 menos por mes en Delivery"
     # diciembre trae aguinaldo: el hito lo marca
     assert plan.milestones[0].month == 12 and plan.milestones[0].aguinaldo_cents == 3_000_000
 
@@ -67,7 +67,7 @@ def test_un_recorte_chico_alcanza():
     # primero: darle todo el ahorro; después, el recorte cubre solo lo que falta
     assert plan.tips[0].kind == "set_contribution" and plan.tips[0].amount_cents == 5_000_000
     corte = next(t for t in plan.tips if t.kind == "cut")
-    assert corte.title == "Gastá 20% menos en Delivery" and corte.amount_cents == 200_000
+    assert corte.title == "Gastá $ 2.000 menos por mes en Delivery" and corte.amount_cents == 200_000
 
 
 def test_nunca_sugiere_recortar_gastos_esenciales():
@@ -117,3 +117,23 @@ def test_api_plan_y_aislamiento(client, make_user):
     res = client.get(f"/api/finance/goals/{g['id']}/plan", headers=ana)
     assert res.status_code == 200 and res.json()["based_on"] == "suggested"
     assert client.get(f"/api/finance/goals/{g['id']}/plan", headers=beto).status_code == 404
+
+
+def test_cada_idea_dice_cuanto_aporta_por_mes():
+    viaje = meta(1, 30_000_000, dt.date(2027, 5, 1))
+    data = finance.FinanceData(incomes=[sueldo()], goals=[viaje, meta(2, 99_000_000)])
+    plan = goal_plan(data, viaje, HOY, RATE)
+    # Te sobran 60.000/mes, repartidos con 1 meta más; destinar 50.000 cubre los 20.000 que faltan
+    assert plan.monthly_savings_cents == 6_000_000 and plan.other_goals == 1
+    assert plan.tips[0].monthly_cents == plan.gap_cents == 2_000_000
+    # Con lo que le toca hoy (30.000/mes) son 10 meses: llegaría en setiembre 2027
+    assert (plan.current_finish_year, plan.current_finish_month) == (2027, 9)
+
+
+def test_aguinaldo_solo_si_llega_antes_de_la_fecha_limite():
+    data_kw = dict(incomes=[sueldo(aguinaldo_cents=3_000_000)], expenses=gasto_por_mes(1_000_000))
+    antes = meta(1, 100_000_000, dt.date(2026, 12, 1))   # vence el 1/12: el aguinaldo (18/12) llega tarde
+    despues = meta(1, 100_000_000, dt.date(2026, 12, 31))
+    kinds = lambda g: [t.kind for t in goal_plan(finance.FinanceData(goals=[g], **data_kw), g, HOY, RATE).tips]
+    assert "aguinaldo" not in kinds(antes)
+    assert "aguinaldo" in kinds(despues)

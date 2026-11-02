@@ -217,42 +217,92 @@ function openSavingSheet(goal) {
 const TIP_ICON = {
   set_contribution: "lock", aguinaldo: "gift", cut: "scissors", subscriptions: "repeat", extend: "calendar-clock",
 };
-const BASED_ON = {
-  deadline: (when) => `para llegar a tu fecha límite, en <b>${when}</b>`,
-  contribution: (when) => `con tu aporte actual llegás en <b>${when}</b>`,
-  suggested: (when) => `sin fecha límite te proponemos llegar en un año: <b>${when}</b>`,
-};
 const isoMonth = (y, m) => `${y}-${String(m).padStart(2, "0")}-01`;
 const shortMonth = (y, m) => new Date(y, m - 1, 1).toLocaleDateString("es-UY", { month: "short", year: "2-digit" });
 
+// 1) La frase de arriba: qué querés y cuánto hay que juntar por mes
+function planHeadline(plan, when) {
+  const target = `<b>${money(plan.remaining_cents)}</b>`;
+  if (plan.based_on === "deadline") {
+    // La fecha exacta ("1 de diciembre de 2026"), no solo el mes: si vence el 1, hay que tenerlo antes
+    const exact = new Date(plan.deadline + "T00:00").toLocaleDateString("es-UY", { day: "numeric", month: "long", year: "numeric" });
+    return `Para juntar los ${target} que te faltan antes del <b>${exact}</b>, necesitás ahorrar:`;
+  }
+  if (plan.based_on === "suggested") return `No le pusiste fecha. Para juntar los ${target} que te faltan en un año (<b>${when}</b>), necesitás ahorrar:`;
+  return `Te faltan ${target}. Al ritmo de hoy llegás en <b>${when}</b> ahorrando:`;
+}
+
+// 2) "¿Te alcanza?": lo que necesitás vs. lo que te sobra hoy para esta meta
+function planCheck(plan) {
+  const need = plan.monthly_cents;
+  const have = plan.current_contribution_cents;
+  const ok = plan.gap_cents === 0;
+  const pct = need ? Math.min((have / need) * 100, 100) : 100;
+  const shared = plan.other_goals
+    ? `De los ${money(plan.monthly_savings_cents)} que te sobran por mes (sueldo menos gastos), a esta meta le toca esta parte porque también tenés ${plan.other_goals === 1 ? "otra meta" : `${plan.other_goals} metas más`}.`
+    : "Es lo que te sobra por mes: lo que entra menos lo que gastás.";
+  const late = !ok && plan.current_finish_year
+    ? `<p class="muted text-xs mt-2">Si no cambiás nada y ahorrás solo eso, llegás recién en <b>${monthYear(isoMonth(plan.current_finish_year, plan.current_finish_month))}</b>.</p>`
+    : !ok ? `<p class="muted text-xs mt-2">Hoy no te sobra plata para esta meta: con lo de ahora no llegarías.</p>` : "";
+  return `
+    <div class="card p-4 mt-5">
+      <h4 class="font-display font-bold mb-3">¿Te alcanza?</h4>
+      <div class="space-y-2 text-sm">
+        <div class="flex justify-between gap-3"><span>Necesitás ahorrar</span><b class="tabular-nums">${money(need)} / mes</b></div>
+        <div class="flex justify-between gap-3"><span>Hoy te sobra para esta meta</span><b class="tabular-nums text-primary">${money(have)} / mes</b></div>
+      </div>
+      <div class="bar mt-3" style="background:${ok ? "var(--surface-2)" : "var(--danger-soft)"}">
+        <span data-fill="${pct}" style="background:${ok ? "var(--success)" : "var(--primary)"}"></span></div>
+      <p class="muted text-xs mt-2">${shared}</p>
+      <div class="mt-3 rounded-xl p-3 text-sm flex gap-2 items-center ${ok ? "bg-primary-soft" : "bg-danger-soft"}">
+        <i data-lucide="${ok ? "circle-check" : "circle-alert"}" class="w-4 h-4 shrink-0 ${ok ? "text-success" : "text-danger"}"></i>
+        <span>${ok ? "<b>Te alcanza.</b> Solo hay que sostenerlo todos los meses."
+                   : `<b>Te faltan ${money(plan.gap_cents)} por mes.</b> Abajo tenés ideas para conseguirlos.`}</span>
+      </div>
+      ${late}
+    </div>`;
+}
+
+// 3) Ideas: cada una dice cuánto suma por mes, y al final si todas juntas alcanzan
+function planIdeas(plan) {
+  const ideas = plan.tips.filter((t) => t.kind !== "extend");
+  const extend = plan.tips.find((t) => t.kind === "extend");
+  if (!ideas.length && !extend) return "";
+  const total = ideas.reduce((s, t) => s + (t.monthly_cents ?? 0), 0);
+  const covers = total >= plan.gap_cents;
+  const card = (t, i) => `
+    <li class="card p-3 flex gap-3 items-start rise" style="animation-delay:${0.15 + i * 0.06}s">
+      <span class="grid place-items-center w-9 h-9 rounded-xl bg-accent-soft text-accent shrink-0"><i data-lucide="${TIP_ICON[t.kind] ?? "lightbulb"}" class="w-4 h-4"></i></span>
+      <div class="min-w-0 flex-1">
+        <div class="font-medium text-sm">${esc(t.title)}</div>
+        <div class="muted text-xs mt-0.5">${esc(t.detail)}</div>
+        <div class="flex flex-wrap items-center gap-2 mt-2 empty:hidden">${
+          t.monthly_cents ? `<span class="chip text-success whitespace-nowrap">Suma +${money(t.monthly_cents)} por mes</span>` : ""}${
+          t.kind === "set_contribution" ? `<button class="btn btn-primary text-xs py-1.5" data-set-contribution="${t.amount_cents}">Aplicar</button>` : ""}</div>
+      </div>
+    </li>`;
+  const summary = total ? `
+    <div class="mt-3 rounded-xl p-3 text-sm ${covers ? "bg-primary-soft" : "bg-accent-soft"}">
+      Si hacés todo esto juntás <b>+${money(total)} por mes</b>:
+      ${covers ? `<b class="text-success">alcanza</b> para llegar a tiempo.` : `todavía faltarían <b>${money(plan.gap_cents - total)}</b> por mes.`}
+    </div>` : "";
+  return `
+    ${ideas.length ? `
+      <h4 class="font-display font-bold mt-6 mb-1">Ideas para conseguir los ${money(plan.gap_cents)} que faltan</h4>
+      <p class="muted text-xs mb-3">Cada una muestra cuánto te suma por mes. Podés combinarlas.</p>
+      <ul class="space-y-2">${ideas.map(card).join("")}</ul>${summary}` : ""}
+    ${extend ? `
+      <h4 class="font-display font-bold mt-6 mb-3">${ideas.length ? "O si no querés cambiar nada…" : "Otra opción"}</h4>
+      <ul>${card(extend, ideas.length)}</ul>` : ""}`;
+}
+
 function planHTML(plan) {
   const when = monthYear(isoMonth(plan.finish_year, plan.finish_month));
-  const status = plan.gap_cents
-    ? `<div class="rounded-xl bg-danger-soft p-3 text-sm flex gap-2 items-start"><i data-lucide="circle-alert" class="w-4 h-4 mt-0.5 text-danger shrink-0"></i>
-        <span>Hoy le van <b>${money(plan.current_contribution_cents)}/mes</b>: te faltan <b>${money(plan.gap_cents)}</b> por mes para cumplir el plan.</span></div>`
-    : `<div class="rounded-xl bg-primary-soft p-3 text-sm flex gap-2 items-center"><i data-lucide="circle-check" class="w-4 h-4 text-success shrink-0"></i>
-        <span>${plan.current_contribution_cents > plan.monthly_cents
-          ? `Hoy le van <b>${money(plan.current_contribution_cents)}/mes</b>: si lo sostenés, llegás antes.`
-          : "Tu aporte actual alcanza. Solo hay que sostenerlo."}</span></div>`;
-
-  const tips = plan.tips.length ? `
-    <h4 class="font-display font-bold mt-6 mb-3">Cómo cerrar la diferencia</h4>
-    <ul class="space-y-2">${plan.tips.map((t, i) => `
-      <li class="card p-3 flex gap-3 items-start rise" style="animation-delay:${0.15 + i * 0.06}s">
-        <span class="grid place-items-center w-9 h-9 rounded-xl bg-accent-soft text-accent shrink-0"><i data-lucide="${TIP_ICON[t.kind] ?? "lightbulb"}" class="w-4 h-4"></i></span>
-        <div class="min-w-0 flex-1">
-          <div class="font-medium text-sm">${esc(t.title)}</div>
-          <div class="muted text-xs mt-0.5">${esc(t.detail)}</div>
-          ${t.kind === "set_contribution" ? `<button class="btn btn-primary text-xs mt-2 py-1.5" data-set-contribution="${t.amount_cents}">Fijar aporte</button>` : ""}
-        </div>
-      </li>`).join("")}</ul>` : "";
-
   const steps = [
     `Cuando cobres, separá <b>${money(plan.monthly_cents)}</b> antes de gastar en otra cosa.`,
     "Guardalo aparte (otra cuenta o caja de ahorro) para no tocarlo sin querer.",
     "Cada mes tocá <b>Sumar ahorro</b> acá: así ves si vas al día con los hitos.",
   ];
-
   const milestones = plan.milestones.map((m, i) => `
     <li class="grid grid-cols-[3.5rem_1fr_auto] gap-3 items-center rise" style="animation-delay:${0.2 + i * 0.04}s">
       <span class="text-xs muted capitalize">${shortMonth(m.year, m.month)}</span>
@@ -262,14 +312,16 @@ function planHTML(plan) {
 
   return `
     <p class="muted text-sm">Plan · ${esc(plan.name)}</p>
-    <div class="mt-2 font-display text-4xl font-bold text-primary" id="plan-monthly">$ 0</div>
-    <p class="text-sm mt-1">por mes, ${BASED_ON[plan.based_on](when)}.</p>
-    <div class="flex gap-2 mt-3 mb-4 flex-wrap">
-      <span class="chip">≈ ${money(plan.weekly_cents)} por semana</span>
-      <span class="chip">≈ ${money(plan.daily_cents)} por día</span>
+    <p class="text-sm mt-3">${planHeadline(plan, when)}</p>
+    <div class="mt-1 flex items-baseline gap-2 flex-wrap">
+      <span class="font-display text-4xl font-bold text-primary" id="plan-monthly">$ 0</span><span class="muted">por mes</span>
     </div>
-    ${status}
-    ${tips}
+    <div class="flex gap-2 mt-2 flex-wrap">
+      <span class="chip">o ${money(plan.weekly_cents)} por semana</span>
+      <span class="chip">o ${money(plan.daily_cents)} por día</span>
+    </div>
+    ${planCheck(plan)}
+    ${planIdeas(plan)}
     <h4 class="font-display font-bold mt-6 mb-3">Tus pasos</h4>
     <ol class="space-y-2 text-sm">${steps.map((s, i) => `
       <li class="flex gap-3"><span class="grid place-items-center w-6 h-6 rounded-full bg-primary-soft text-primary text-xs font-bold shrink-0">${i + 1}</span><span>${s}</span></li>`).join("")}</ol>
