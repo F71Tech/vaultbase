@@ -9,14 +9,27 @@ Así evitamos los errores de redondeo de los decimales (0.1 + 0.2 != 0.3).
 import datetime as dt
 from enum import Enum
 from typing import ClassVar
+from zoneinfo import ZoneInfo
 
 from pydantic import model_validator
 from sqlmodel import SQLModel
+
+URUGUAY_TZ = ZoneInfo("America/Montevideo")
 
 
 def utcnow() -> dt.datetime:
     """Fecha y hora actual en UTC (hora universal, independiente del país)."""
     return dt.datetime.now(dt.timezone.utc)
+
+
+def today_uy() -> dt.date:
+    """
+    Qué día es HOY en Uruguay.
+
+    El servidor de deploy suele estar en hora UTC (3 horas adelante): a las
+    22:00 de Montevideo, en UTC ya es "mañana". Por eso no usamos date.today().
+    """
+    return dt.datetime.now(URUGUAY_TZ).date()
 
 
 class Currency(str, Enum):

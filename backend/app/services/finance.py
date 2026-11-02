@@ -1,0 +1,401 @@
+"""
+El "cerebro" financiero de VaultBase.
+
+Todas las funciones de este archivo son PURAS: reciben datos y devuelven
+resultados, sin tocar la base de datos ni internet. Eso las hace fáciles de
+entender y de testear: mismo dato de entrada -> mismo resultado, siempre.
+
+Todos los montos son enteros en centésimos de PESO URUGUAYO (UYU).
+"""
+
+import calendar
+import datetime as dt
+import math
+from dataclasses import dataclass, field
+
+from pydantic import BaseModel
+
+from ..models import (
+    Currency, Expense, ExpenseKind, Goal, Income, IncomeFrequency, Subscription,
+    SubscriptionFrequency,
+)
+
+# Cuántas veces "entra" cada frecuencia en un mes.
+# Nota: "quincenal" en Uruguay = 2 cobros por mes (el 1 y el 15).
+MONTHLY_FACTOR = {
+    IncomeFrequency.weekly: 52 / 12,
+    IncomeFrequency.biweekly: 2,
+    IncomeFrequency.monthly: 1,
+    IncomeFrequency.annual: 1 / 12,
+}
+FOOD_CATEGORY = "food"
+SUBSCRIPTIONS_KEY = "subscriptions"  # pseudo-categoría para el gráfico
+VARIABLE_ESTIMATE_KEY = "variable_estimate"  # gastos variables proyectados
+
+
+class RateMissing(Exception):
+    """Hay montos en dólares pero no tenemos cotización para convertirlos."""
+
+
+# --- Utilidades de fechas y monedas -----------------------------------------
+
+def month_bounds(year: int, month: int) -> tuple[dt.date, dt.date]:
+    """Primer y último día del mes."""
+    last_day = calendar.monthrange(year, month)[1]
+    return dt.date(year, month, 1), dt.date(year, month, last_day)
+
+
+def add_months(year: int, month: int, n: int) -> tuple[int, int]:
+    """Suma (o resta) n meses a un año/mes. Ej: (2026, 11) + 3 = (2027, 2)."""
+    index = year * 12 + (month - 1) + n
+    return index // 12, index % 12 + 1
+
+
+def add_months_to_date(date: dt.date, n: int) -> dt.date:
+    year, month = add_months(date.year, date.month, n)
+    day = min(date.day, calendar.monthrange(year, month)[1])  # 31/1 + 1 mes = 28/2
+    return dt.date(year, month, day)
+
+
+def to_uyu(amount_cents: int, currency: Currency, rate: float | None) -> int:
+    """Convierte un monto a pesos. Si es USD, multiplica por la cotización."""
+    if currency == Currency.UYU:
+        return amount_cents
+    if rate is None:
+        raise RateMissing("Falta la cotización del dólar")
+    return round(amount_cents * rate)
+
+
+def _category(expense: Expense) -> str:
+    """La categoría como texto (acepta tanto el Enum como un string)."""
+    return getattr(expense.category, "value", expense.category)
+
+
+def _active_in(start: dt.date, end: dt.date | None, first: dt.date, last: dt.date) -> bool:
+    """¿Un período [start, end] se superpone con el mes [first, last]?"""
+    return start <= last and (end is None or end >= first)
+
+
+# --- Montos de cada elemento en un mes dado ---------------------------------
+
+def income_in_month(income: Income, year: int, month: int, rate: float | None) -> int:
+    first, last = month_bounds(year, month)
+    amount = to_uyu(income.amount_cents, income.currency, rate)
+    if income.frequency == IncomeFrequency.one_time:
+        return amount if first <= income.start_date <= last else 0
+    if not _active_in(income.start_date, income.end_date, first, last):
+        return 0
+    return round(amount * MONTHLY_FACTOR[income.frequency])
+
+
+def expense_in_month(expense: Expense, year: int, month: int, rate: float | None) -> int:
+    first, last = month_bounds(year, month)
+    # Si el gasto tiene su cotización "congelada", usamos esa; si no, la actual
+    amount = to_uyu(expense.amount_cents, expense.currency, expense.exchange_rate or rate)
+    if expense.kind == ExpenseKind.fixed:
+        return amount if _active_in(expense.date, expense.end_date, first, last) else 0
+    return amount if first <= expense.date <= last else 0
+
+
+def subscription_in_month(sub: Subscription, year: int, month: int, rate: float | None) -> int:
+    if not sub.active:
+        return 0
+    first, last = month_bounds(year, month)
+    if sub.created_at.date() > last:  # todavía no existía en ese mes
+        return 0
+    amount = to_uyu(sub.amount_cents, sub.currency, rate)
+    # Una suscripción anual se reparte en 12 meses para el presupuesto mensual
+    return amount if sub.frequency == SubscriptionFrequency.monthly else round(amount / 12)
+
+
+# --- Resumen de un mes ------------------------------------------------------
+
+@dataclass
+class FinanceData:
+    """Todo lo que el usuario cargó, junto, para pasárselo a los cálculos."""
+
+    incomes: list[Income] = field(default_factory=list)
+    expenses: list[Expense] = field(default_factory=list)
+    subscriptions: list[Subscription] = field(default_factory=list)
+    goals: list[Goal] = field(default_factory=list)
+
+
+class MonthSummary(BaseModel):
+    year: int
+    month: int
+    income_cents: int
+    fixed_expenses_cents: int       # gastos fijos (sin suscripciones)
+    subscriptions_cents: int
+    variable_expenses_cents: int
+    total_expenses_cents: int
+    balance_cents: int              # ingresos - gastos
+    by_category: dict[str, int]     # para el gráfico de torta
+    projected: bool                 # True = mes futuro (estimado)
+
+
+def month_summary(
+    data: FinanceData, year: int, month: int, rate: float | None,
+    projected_variable_cents: int | None = None,
+) -> MonthSummary:
+    """
+    Resumen de un mes. Si `projected_variable_cents` viene con valor, el mes se
+    trata como FUTURO: los gastos variables reales se reemplazan por esa estimación.
+    """
+    income = sum(income_in_month(i, year, month, rate) for i in data.incomes)
+    subs = sum(subscription_in_month(s, year, month, rate) for s in data.subscriptions)
+
+    fixed = 0
+    variable = 0
+    by_category: dict[str, int] = {}
+    for expense in data.expenses:
+        amount = expense_in_month(expense, year, month, rate)
+        if amount == 0:
+            continue
+        if expense.kind == ExpenseKind.fixed:
+            fixed += amount
+        elif projected_variable_cents is None:
+            variable += amount
+        else:
+            continue  # mes futuro: los variables se estiman aparte
+        key = _category(expense)
+        by_category[key] = by_category.get(key, 0) + amount
+
+    projected = projected_variable_cents is not None
+    if projected:
+        variable = projected_variable_cents
+        if variable:
+            by_category[VARIABLE_ESTIMATE_KEY] = variable
+    if subs:
+        by_category[SUBSCRIPTIONS_KEY] = subs
+
+    total = fixed + subs + variable
+    return MonthSummary(
+        year=year, month=month, income_cents=income, fixed_expenses_cents=fixed,
+        subscriptions_cents=subs, variable_expenses_cents=variable,
+        total_expenses_cents=total, balance_cents=income - total,
+        by_category=by_category, projected=projected,
+    )
+
+
+# --- Capacidad de ahorro ----------------------------------------------------
+
+def average_variable_expenses(data: FinanceData, today: dt.date, rate: float | None, months: int = 3) -> int:
+    """
+    Promedio de gastos variables de los últimos `months` meses COMPLETOS.
+
+    Solo cuenta meses desde que el usuario empezó a cargar gastos (si empezó
+    este mes, los meses anteriores en 0 bajarían el promedio sin razón).
+    Si no hay ningún mes completo con datos, usa lo gastado en el mes actual.
+    """
+    variables = [e for e in data.expenses if e.kind == ExpenseKind.variable]
+    if not variables:
+        return 0
+    first_date = min(e.date for e in variables)
+    totals = []
+    for back in range(1, months + 1):
+        year, month = add_months(today.year, today.month, -back)
+        if month_bounds(year, month)[1] < first_date:
+            break  # antes de que empezara a usar la app
+        totals.append(sum(expense_in_month(e, year, month, rate) for e in variables))
+    if totals:
+        return round(sum(totals) / len(totals))
+    return sum(expense_in_month(e, today.year, today.month, rate) for e in variables)
+
+
+class SavingsCapacity(BaseModel):
+    recurring_income_cents: int       # ingresos que se repiten (sin los únicos)
+    fixed_costs_cents: int            # gastos fijos + suscripciones
+    disposable_income_cents: int      # ingreso disponible = ingresos - fijos
+    avg_variable_expenses_cents: int  # promedio de gastos variables
+    monthly_savings_cents: int        # ahorro mensual disponible
+
+
+def savings_capacity(data: FinanceData, today: dt.date, rate: float | None) -> SavingsCapacity:
+    """Cuánto puede ahorrar el usuario por mes, en promedio."""
+    y, m = today.year, today.month
+    recurring = sum(
+        income_in_month(i, y, m, rate) for i in data.incomes
+        if i.frequency != IncomeFrequency.one_time
+    )
+    fixed = sum(
+        expense_in_month(e, y, m, rate) for e in data.expenses if e.kind == ExpenseKind.fixed
+    ) + sum(subscription_in_month(s, y, m, rate) for s in data.subscriptions)
+    avg_variable = average_variable_expenses(data, today, rate)
+    disposable = recurring - fixed
+    return SavingsCapacity(
+        recurring_income_cents=recurring, fixed_costs_cents=fixed,
+        disposable_income_cents=disposable, avg_variable_expenses_cents=avg_variable,
+        monthly_savings_cents=disposable - avg_variable,
+    )
+
+
+# --- Año completo -----------------------------------------------------------
+
+class YearSummary(BaseModel):
+    year: int
+    months: list[MonthSummary]
+    income_cents: int
+    expenses_cents: int
+    balance_cents: int
+
+
+def year_summary(data: FinanceData, year: int, today: dt.date, rate: float | None) -> YearSummary:
+    """Los 12 meses del año: reales hasta el mes actual, estimados después."""
+    estimate = average_variable_expenses(data, today, rate)
+    months = []
+    for month in range(1, 13):
+        is_future = (year, month) > (today.year, today.month)
+        months.append(month_summary(data, year, month, rate, estimate if is_future else None))
+    income = sum(m.income_cents for m in months)
+    expenses = sum(m.total_expenses_cents for m in months)
+    return YearSummary(
+        year=year, months=months, income_cents=income,
+        expenses_cents=expenses, balance_cents=income - expenses,
+    )
+
+
+# --- Presupuesto de comida --------------------------------------------------
+
+class FoodWeek(BaseModel):
+    start: dt.date
+    end: dt.date
+    budget_cents: int
+    spent_cents: int
+    is_current: bool
+
+
+class FoodBudget(BaseModel):
+    percentage: int
+    monthly_budget_cents: int
+    spent_cents: int
+    remaining_cents: int
+    by_subcategory: dict[str, int]
+    weeks: list[FoodWeek]
+
+
+def food_budget(
+    data: FinanceData, capacity: SavingsCapacity, percentage: int,
+    today: dt.date, rate: float | None,
+) -> FoodBudget:
+    """
+    Presupuesto de comida del mes = % del ingreso disponible.
+    Se divide en semanas de 7 días desde el día 1 (la última puede ser más corta),
+    y cada semana recibe una parte proporcional a sus días.
+    """
+    first, last = month_bounds(today.year, today.month)
+    days_in_month = last.day
+    monthly = max(capacity.disposable_income_cents, 0) * percentage // 100
+
+    food = [
+        e for e in data.expenses
+        if _category(e) == FOOD_CATEGORY and e.kind == ExpenseKind.variable
+        and first <= e.date <= last
+    ]
+    by_sub: dict[str, int] = {}
+    for e in food:
+        key = e.subcategory or "general"
+        by_sub[key] = by_sub.get(key, 0) + to_uyu(e.amount_cents, e.currency, e.exchange_rate or rate)
+
+    weeks = []
+    start = first
+    while start <= last:
+        end = min(start + dt.timedelta(days=6), last)
+        days = (end - start).days + 1
+        spent = sum(
+            to_uyu(e.amount_cents, e.currency, e.exchange_rate or rate)
+            for e in food if start <= e.date <= end
+        )
+        weeks.append(FoodWeek(
+            start=start, end=end, budget_cents=monthly * days // days_in_month,
+            spent_cents=spent, is_current=start <= today <= end,
+        ))
+        start = end + dt.timedelta(days=1)
+
+    spent_total = sum(by_sub.values())
+    return FoodBudget(
+        percentage=percentage, monthly_budget_cents=monthly, spent_cents=spent_total,
+        remaining_cents=monthly - spent_total, by_subcategory=by_sub, weeks=weeks,
+    )
+
+
+# --- Metas ------------------------------------------------------------------
+
+class GoalProjection(BaseModel):
+    goal_id: int
+    name: str
+    target_cents: int
+    saved_cents: int
+    remaining_cents: int
+    progress_pct: float
+    monthly_contribution_cents: int   # cuánto se le asigna por mes
+    contribution_is_manual: bool
+    months_needed: int | None         # None = con el ahorro actual no se alcanza
+    estimated_date: dt.date | None
+    deadline: dt.date | None
+    # "completed" | "on_track" | "behind" | "no_deadline" | "unreachable"
+    status: str
+    required_monthly_for_deadline_cents: int | None
+
+
+def allocate_contributions(goals: list[Goal], monthly_savings_cents: int) -> dict[int, int]:
+    """
+    Reparte el ahorro mensual entre las metas sin completar:
+      1) las que tienen aporte manual reciben ese aporte;
+      2) lo que sobra se divide en partes iguales entre las demás.
+    """
+    pending = [g for g in goals if g.saved_cents < g.target_cents]
+    allocation = {}
+    manual_total = 0
+    for g in pending:
+        if g.monthly_contribution_cents is not None:
+            allocation[g.id] = g.monthly_contribution_cents
+            manual_total += g.monthly_contribution_cents
+    automatic = [g for g in pending if g.monthly_contribution_cents is None]
+    leftover = max(monthly_savings_cents - manual_total, 0)
+    for g in automatic:
+        allocation[g.id] = leftover // len(automatic)
+    return allocation
+
+
+def months_to_reach(remaining_cents: int, monthly_cents: int) -> int | None:
+    if remaining_cents <= 0:
+        return 0
+    if monthly_cents <= 0:
+        return None
+    return math.ceil(remaining_cents / monthly_cents)
+
+
+def project_goals(goals: list[Goal], monthly_savings_cents: int, today: dt.date) -> list[GoalProjection]:
+    allocation = allocate_contributions(goals, monthly_savings_cents)
+    result = []
+    for g in goals:
+        remaining = max(g.target_cents - g.saved_cents, 0)
+        contribution = allocation.get(g.id, 0)
+        months = months_to_reach(remaining, contribution)
+        estimated = add_months_to_date(today, months) if months is not None else None
+
+        required = None
+        if g.deadline and remaining > 0:
+            # meses que quedan hasta la fecha límite (al menos 1)
+            months_left = max((g.deadline.year - today.year) * 12 + g.deadline.month - today.month, 1)
+            required = math.ceil(remaining / months_left)
+
+        if remaining == 0:
+            status = "completed"
+        elif months is None:
+            status = "unreachable"
+        elif g.deadline is None:
+            status = "no_deadline"
+        else:
+            status = "on_track" if estimated <= g.deadline else "behind"
+
+        result.append(GoalProjection(
+            goal_id=g.id, name=g.name, target_cents=g.target_cents, saved_cents=g.saved_cents,
+            remaining_cents=remaining,
+            progress_pct=round(min(g.saved_cents / g.target_cents, 1) * 100, 1),
+            monthly_contribution_cents=contribution,
+            contribution_is_manual=g.monthly_contribution_cents is not None,
+            months_needed=months, estimated_date=estimated, deadline=g.deadline,
+            status=status, required_monthly_for_deadline_cents=required,
+        ))
+    return result

@@ -18,6 +18,23 @@ from backend.app.database import get_session
 from backend.app.main import app
 
 PASSWORD = "clave-segura-123"
+FAKE_USD_RATE = 40.0
+
+
+@pytest.fixture(autouse=True)
+def fake_rate_sources(monkeypatch):
+    """
+    autouse=True: se aplica a TODOS los tests sin pedirlo.
+    Reemplaza las fuentes de cotización por una falsa: los tests nunca salen
+    a internet (serían lentos y fallarían sin conexión o si el BCU está caído).
+    """
+    from backend.app.services import exchange
+
+    def fake_bcu(until):
+        return exchange.RateQuote(rate=FAKE_USD_RATE, rate_date=until, source="BCU")
+
+    monkeypatch.setattr(exchange, "fetch_bcu", fake_bcu)
+    monkeypatch.setattr(exchange, "fetch_open_er", lambda until: None)
 
 
 @pytest.fixture

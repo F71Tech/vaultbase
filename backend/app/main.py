@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import get_settings
 from .database import create_db_and_tables
-from .routers import auth, categories, resources, users
+from .routers import auth, categories, finance, resources, users
 
 settings = get_settings()
 
@@ -61,6 +61,7 @@ app.include_router(resources.expenses_router)
 app.include_router(resources.subscriptions_router)
 app.include_router(resources.goals_router)
 app.include_router(resources.wishlist_router)
+app.include_router(finance.router)
 
 
 # --- Frontend ----------------------------------------------------------------

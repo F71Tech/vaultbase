@@ -13,3 +13,4 @@ pwdlib[argon2]==0.3.1        # hashea contraseñas de forma segura (argon2)
 python-multipart==0.0.33     # permite recibir formularios (lo usa el login)
 httpx==0.28.1                # hace pedidos HTTP (cotización del dólar) y sirve para tests
 pytest==9.2.0                # corre los tests automáticos
+tzdata==2026.6               # zonas horarias (para saber qué día es en Uruguay)
