@@ -28,8 +28,11 @@ function renderInstallmentOptions() {
 }
 
 // --- Resultado ---
-const purchaseText = (s) => s.purchase_in_months === 0 ? "Hoy"
-  : new Date(s.purchase_date + "T00:00").toLocaleDateString("es-UY", { month: "long", year: "numeric" });
+const purchaseText = (s) => {
+  if (s.purchase_in_months === 0) return "Hoy";
+  const text = new Date(s.purchase_date + "T00:00").toLocaleDateString("es-UY", { month: "long", year: "numeric" });
+  return text.charAt(0).toUpperCase() + text.slice(1);  // "diciembre de 2026" -> "Diciembre de 2026"
+};
 
 function strategyCard(s, savings, index) {
   // Barra: cuánto del ahorro mensual se come la cuota del primer mes
@@ -49,7 +52,7 @@ function strategyCard(s, savings, index) {
     <h3 class="font-display font-semibold text-lg mb-4">${esc(s.label)}</h3>
     <dl class="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
       <div><dt class="muted">${s.key === "wait_aguinaldo" ? "Sale de tu ahorro" : "Pagás por mes"}</dt><dd class="font-display text-xl font-bold">${money(s.monthly_payment_cents)}</dd></div>
-      <div><dt class="muted">Lo tenés</dt><dd class="font-display text-xl font-bold capitalize">${purchaseText(s)}</dd></div>
+      <div><dt class="muted">Lo tenés</dt><dd class="font-display text-xl font-bold">${purchaseText(s)}</dd></div>
       <div><dt class="muted">Total</dt><dd class="font-semibold">${money(s.total_cost_cents)}</dd></div>
       <div><dt class="muted">Costo extra</dt><dd class="font-semibold ${s.extra_cost_cents ? "text-danger" : "text-success"}">${s.extra_cost_cents ? money(s.extra_cost_cents) : "$ 0"}</dd></div>
     </dl>

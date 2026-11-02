@@ -12,6 +12,7 @@ from typing import ClassVar
 from zoneinfo import ZoneInfo
 
 from pydantic import model_validator
+from sqlalchemy import Enum as SAEnum
 from sqlmodel import SQLModel
 
 URUGUAY_TZ = ZoneInfo("America/Montevideo")
@@ -37,6 +38,19 @@ class Currency(str, Enum):
 
     UYU = "UYU"
     USD = "USD"
+
+
+def enum_column(enum_class: type[Enum]) -> SAEnum:
+    """
+    Cómo se guarda un Enum en la base: como TEXTO común (native_enum=False).
+
+    PostgreSQL tiene "tipos enum nativos", pero traen dos problemas:
+      - agregar una opción nueva (ej: una categoría) exige una migración especial;
+      - si dos tablas usan el mismo enum (la moneda está en 4), las migraciones
+        intentan crear el tipo varias veces y fallan.
+    Como texto, la validación igual la hace Python (pydantic) antes de guardar.
+    """
+    return SAEnum(enum_class, native_enum=False, length=20)
 
 
 class UpdateSchema(SQLModel):

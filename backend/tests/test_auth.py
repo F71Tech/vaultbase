@@ -3,6 +3,24 @@
 from .conftest import PASSWORD
 
 
+def test_health_y_encabezados_de_seguridad(client):
+    res = client.get("/api/health")
+    assert res.status_code == 200 and res.json()["status"] == "ok"
+    assert res.headers["X-Frame-Options"] == "DENY"
+    assert res.headers["X-Content-Type-Options"] == "nosniff"
+
+
+def test_produccion_exige_secret_key_propia(monkeypatch):
+    import pytest
+    from backend.app.config import Settings
+
+    with pytest.raises(ValueError):
+        Settings(app_env="production", secret_key="corta", _env_file=None)
+    ok = Settings(app_env="production", secret_key="x" * 40, _env_file=None,
+                  database_url="postgres://u:p@host/db")
+    assert ok.database_url == "postgresql+psycopg://u:p@host/db"
+
+
 def test_registro_no_devuelve_la_contrasena(client):
     res = client.post(
         "/api/auth/register",

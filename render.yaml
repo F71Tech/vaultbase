@@ -1,0 +1,21 @@
+# "Blueprint" de Render: describe cómo publicar VaultBase.
+# Render lo lee al conectar el repositorio y crea el servicio solo.
+services:
+  - type: web
+    name: vaultbase
+    runtime: python
+    plan: free
+    region: oregon
+    buildCommand: bash build.sh
+    # $PORT lo pone Render. 0.0.0.0 = aceptar conexiones de afuera.
+    # Las migraciones se aplican solas al arrancar (ver backend/app/main.py).
+    startCommand: uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT --proxy-headers
+    healthCheckPath: /api/health
+    autoDeploy: true  # cada "git push" a main publica la versión nueva
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: SECRET_KEY
+        generateValue: true  # Render inventa una clave larga y secreta
+      - key: DATABASE_URL
+        sync: false  # la pegás vos en el panel de Render (la URL de Neon)

@@ -1,0 +1,29 @@
+"""Test del script que prepara el frontend para producción."""
+
+import importlib.util
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+spec = importlib.util.spec_from_file_location("build_frontend", ROOT / "scripts" / "build_frontend.py")
+build = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(build)
+
+
+def test_todas_las_paginas_tienen_el_cdn_esperado():
+    # Si alguien cambia la versión del CDN en un HTML y no en el script,
+    # esa página quedaría sin el CSS compilado en producción.
+    for page in (ROOT / "frontend").glob("*.html"):
+        assert build.CDN_TAG in page.read_text(encoding="utf-8"), page.name
+
+
+def test_reemplaza_cdn_por_css_compilado(tmp_path, monkeypatch):
+    page = tmp_path / "x.html"
+    page.write_text(f"<head>{build.CDN_TAG}</head>", encoding="utf-8")
+    monkeypatch.setattr(build, "FRONTEND", tmp_path)
+    assert build.swap_cdn_for_compiled_css() == 1
+    assert build.LINK_TAG in page.read_text(encoding="utf-8")
+
+
+def test_si_no_hay_compilador_no_toca_nada(tmp_path, monkeypatch):
+    monkeypatch.setattr(build, "FRONTEND", tmp_path)
+    assert build.compile_tailwind(str(tmp_path / "no-existe")) is False

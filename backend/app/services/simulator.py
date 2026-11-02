@@ -212,6 +212,11 @@ def simulate_purchase(price_cents: int, monthly_savings_cents: int, goals: list[
         result = _evaluate("wait_aguinaldo", label, [0] * offset + [rest], offset, **common)
         result.monthly_payment_cents = rest
         result.months_committed = 1 if rest else 0
+        # El calendario solo tiene lo que sale del AHORRO; la compra cuesta lo
+        # mismo (la diferencia la pone el aguinaldo). Sin esto, el "costo extra"
+        # daba negativo y esta opción ganaba el ranking con trampa.
+        result.total_cost_cents = price_cents
+        result.extra_cost_cents = 0
         strategies.append(result)
 
     for option in installments:

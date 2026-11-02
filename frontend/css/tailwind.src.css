@@ -1,0 +1,8 @@
+/*
+  Entrada para compilar Tailwind en producción (lo hace build.sh en Render).
+  Tailwind revisa los .html y .js del proyecto, encuentra qué clases usamos
+  (flex, gap-3, md:hidden…) y genera un CSS solo con esas.
+*/
+@import "tailwindcss";
+/* Dónde buscar clases: toda la carpeta frontend (HTML y JS) */
+@source "../";

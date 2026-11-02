@@ -56,6 +56,19 @@ def test_simulador_recomienda_esperar_al_aguinaldo():
     assert "aguinaldo" in r.recommendation
 
 
+def test_esperar_aguinaldo_cuesta_lo_mismo_que_la_compra():
+    r = simulate_purchase(2_000_000, 1_000_000, [], 0, dt.date(2026, 11, 15), [], aguinaldo=(1, 2_612_250))
+    s = {x.key: x for x in r.strategies}["wait_aguinaldo"]
+    assert s.total_cost_cents == 2_000_000
+    assert s.extra_cost_cents == 0  # nunca negativo
+
+
+def test_sin_metas_y_con_ahorro_conviene_contado_y_no_esperar():
+    # Si alcanza el ahorro del mes y no hay metas, comprar ya gana a esperar
+    r = simulate_purchase(500_000, 1_000_000, [], 0, dt.date(2026, 11, 15), [], aguinaldo=(1, 2_612_250))
+    assert r.recommended_key == "cash"
+
+
 def test_endpoint_calculadora_publica(client):
     res = client.post("/api/salary/calculate", json={"nominal_cents": 6_500_000})
     assert res.status_code == 200

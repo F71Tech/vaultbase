@@ -8,11 +8,13 @@ Este archivo crea la aplicación FastAPI. Uvicorn (el servidor) la busca acá:
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
+from sqlmodel import select
 
 from .config import get_settings
-from .database import create_db_and_tables
+from .database import run_migrations
+from .deps import SessionDep
 from .routers import auth, categories, finance, resources, salary, users
 
 settings = get_settings()
@@ -25,8 +27,9 @@ FRONTEND_DIR = BASE_DIR / "frontend"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Lo que está antes del "yield" corre UNA vez, al arrancar el servidor
-    create_db_and_tables()
+    # Lo que está antes del "yield" corre UNA vez, al arrancar el servidor:
+    # aplicamos las migraciones pendientes para que la base esté al día.
+    run_migrations()
     yield
     # Lo que esté después del "yield" correría al apagarlo (por ahora, nada)
 
@@ -48,9 +51,29 @@ app = FastAPI(
 # Todas las rutas de la API empiezan con /api para no mezclarse con las páginas.
 
 @app.get("/api/health", tags=["Sistema"])
-def health():
-    """Chequeo simple para saber si el servidor está vivo."""
-    return {"status": "ok", "app": settings.app_name}
+def health(session: SessionDep):
+    """
+    Chequeo de salud: el servidor responde Y la base de datos contesta.
+    Render lo consulta para saber si el deploy salió bien.
+    """
+    session.exec(select(1))  # si la base no responde, esto lanza un error (500)
+    return {"status": "ok", "app": settings.app_name, "env": settings.app_env}
+
+
+# --- Encabezados de seguridad ------------------------------------------------
+# Un "middleware" es código que corre en TODAS las respuestas. Acá agregamos
+# encabezados que le piden al navegador ser más estricto:
+#   - nosniff: no "adivinar" el tipo de archivo (evita ejecutar algo como script)
+#   - DENY: que ninguna otra web pueda meter VaultBase adentro de un iframe
+#     (evita "clickjacking": botones invisibles encima de la app)
+#   - Referrer-Policy: no mandar la URL completa a otros sitios
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
 
 
 app.include_router(auth.router)

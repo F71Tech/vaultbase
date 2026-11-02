@@ -14,3 +14,5 @@ python-multipart==0.0.33     # permite recibir formularios (lo usa el login)
 httpx==0.28.1                # hace pedidos HTTP (cotización del dólar) y sirve para tests
 pytest==9.2.0                # corre los tests automáticos
 tzdata==2026.6               # zonas horarias (para saber qué día es en Uruguay)
+alembic==1.20.1              # migraciones: cambios en las tablas sin perder datos
+psycopg[binary]==3.3.6       # "driver" para conectarse a PostgreSQL (producción)

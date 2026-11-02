@@ -16,7 +16,7 @@ from pydantic import model_validator
 from sqlmodel import Field, SQLModel
 
 from ..categories import CATEGORY_TREE, is_valid_subcategory
-from .common import Currency, UpdateSchema, today_uy, utcnow
+from .common import Currency, UpdateSchema, enum_column, today_uy, utcnow
 
 
 class ExpenseCategory(str, Enum):
@@ -53,11 +53,11 @@ class ExpenseKind(str, Enum):
 
 
 class ExpenseBase(SQLModel):
-    category: ExpenseCategory
+    category: ExpenseCategory = Field(sa_type=enum_column(ExpenseCategory))
     subcategory: str | None = Field(default=None, max_length=30)  # vacía = "general"
     amount_cents: int = Field(gt=0)
-    currency: Currency = Currency.UYU
-    kind: ExpenseKind = ExpenseKind.variable
+    currency: Currency = Field(default=Currency.UYU, sa_type=enum_column(Currency))
+    kind: ExpenseKind = Field(default=ExpenseKind.variable, sa_type=enum_column(ExpenseKind))
     date: dt.date = Field(default_factory=today_uy)
     # Solo para gastos fijos: hasta cuándo se repiten (vacío = sigue vigente)
     end_date: dt.date | None = None

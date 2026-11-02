@@ -5,7 +5,7 @@ from enum import Enum
 
 from sqlmodel import Field, SQLModel
 
-from .common import Currency, UpdateSchema, utcnow
+from .common import Currency, UpdateSchema, enum_column, utcnow
 
 
 class Priority(str, Enum):
@@ -17,8 +17,8 @@ class Priority(str, Enum):
 class WishItemBase(SQLModel):
     name: str = Field(min_length=1, max_length=80)
     cost_cents: int = Field(gt=0)
-    currency: Currency = Currency.UYU
-    priority: Priority = Priority.medium
+    currency: Currency = Field(default=Currency.UYU, sa_type=enum_column(Currency))
+    priority: Priority = Field(default=Priority.medium, sa_type=enum_column(Priority))
     notes: str | None = Field(default=None, max_length=200)
 
 

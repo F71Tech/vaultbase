@@ -5,7 +5,7 @@ from enum import Enum
 
 from sqlmodel import Field, SQLModel
 
-from .common import Currency, UpdateSchema, today_uy, utcnow
+from .common import Currency, UpdateSchema, enum_column, today_uy, utcnow
 
 
 class IncomeFrequency(str, Enum):
@@ -19,8 +19,8 @@ class IncomeFrequency(str, Enum):
 class IncomeBase(SQLModel):
     source: str = Field(min_length=1, max_length=80)  # ej: "Sueldo", "Freelance"
     amount_cents: int = Field(gt=0)
-    currency: Currency = Currency.UYU
-    frequency: IncomeFrequency = IncomeFrequency.monthly
+    currency: Currency = Field(default=Currency.UYU, sa_type=enum_column(Currency))
+    frequency: IncomeFrequency = Field(default=IncomeFrequency.monthly, sa_type=enum_column(IncomeFrequency))
     # Desde cuándo se cobra (para un ingreso único: el día que se cobró)
     start_date: dt.date = Field(default_factory=today_uy)
     # Hasta cuándo se cobra (vacío = sigue vigente)

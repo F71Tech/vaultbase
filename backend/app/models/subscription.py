@@ -10,7 +10,7 @@ from enum import Enum
 
 from sqlmodel import Field, SQLModel
 
-from .common import Currency, UpdateSchema, utcnow
+from .common import Currency, UpdateSchema, enum_column, utcnow
 
 
 class SubscriptionFrequency(str, Enum):
@@ -21,8 +21,8 @@ class SubscriptionFrequency(str, Enum):
 class SubscriptionBase(SQLModel):
     name: str = Field(min_length=1, max_length=80)
     amount_cents: int = Field(gt=0)
-    currency: Currency = Currency.USD
-    frequency: SubscriptionFrequency = SubscriptionFrequency.monthly
+    currency: Currency = Field(default=Currency.USD, sa_type=enum_column(Currency))
+    frequency: SubscriptionFrequency = Field(default=SubscriptionFrequency.monthly, sa_type=enum_column(SubscriptionFrequency))
     billing_day: int = Field(default=1, ge=1, le=31)  # día del mes en que se cobra
     active: bool = True  # pausada = False (no cuenta en los cálculos)
 
