@@ -78,6 +78,10 @@ export function openInstall() {
 /** Muestra el aviso una vez (en celulares, si no está instalada ni lo cerraron hace poco). */
 export function maybeSuggestInstall() {
   if (isInstalled()) return;
+  // La primera vez sale el tutorial: no le tiramos dos cosas encima a la vez
+  let tourDone = false;
+  try { tourDone = localStorage.getItem("vb-tour-done") === "1"; } catch { /* sin almacenamiento */ }
+  if (!tourDone) return;
   window.addEventListener("beforeinstallprompt", (e) => {
     e.preventDefault();          // que no salga el cartel del navegador: usamos el nuestro
     deferredPrompt = e;

@@ -7,6 +7,7 @@
 import { api, auth, isDemoEmail, requireLogin } from "./api.js";
 import { openExpenseSheet } from "./expense-form.js";
 import { isInstalled, maybeSuggestInstall, openInstall } from "./install.js";
+import { startTour } from "./tour.js";
 import { confirmDialog, createSheet, esc, icons, toast, toggleTheme } from "./ui.js";
 
 const NAV = [
@@ -175,6 +176,7 @@ export function mountShell() {
       <div class="mt-auto mb-6 space-y-1">
         <button class="sidebar-link w-full" data-action="account"><i data-lucide="user-round"></i>Mi cuenta</button>
         ${isInstalled() ? "" : `<button class="sidebar-link w-full" data-action="install"><i data-lucide="monitor-smartphone"></i>Instalar la app</button>`}
+        <button class="sidebar-link w-full" data-action="tour"><i data-lucide="graduation-cap"></i>Ver el tutorial</button>
         <button class="sidebar-link w-full" data-action="feedback"><i data-lucide="message-circle"></i>Enviar un comentario</button>
         <a class="sidebar-link" href="/admin.html" data-admin-link hidden><i data-lucide="shield"></i>Administrador</a>
         <button class="sidebar-link w-full" data-action="theme"><i data-lucide="sun-moon"></i>Claro / oscuro</button>
@@ -209,6 +211,7 @@ export function mountShell() {
         <i data-lucide="${n.icon}"></i>${n.label}</a>`).join("")}
       <button class="sidebar-link w-full" data-action="account"><i data-lucide="user-round"></i>Mi cuenta</button>
       ${isInstalled() ? "" : `<button class="sidebar-link w-full" data-action="install"><i data-lucide="smartphone"></i>Instalar en el celular</button>`}
+      <button class="sidebar-link w-full" data-action="tour"><i data-lucide="graduation-cap"></i>Ver el tutorial</button>
       <button class="sidebar-link w-full" data-action="feedback"><i data-lucide="message-circle"></i>Enviar un comentario</button>
       <a class="sidebar-link" href="/admin.html" data-admin-link hidden><i data-lucide="shield"></i>Administrador</a>
       <button class="sidebar-link w-full" data-action="theme"><i data-lucide="sun-moon"></i>Claro / oscuro</button>
@@ -223,6 +226,12 @@ export function mountShell() {
     if (action === "account") { more.close(); openAccount(); }
     if (action === "install") { more.close(); openInstall(); }
     if (action === "feedback") { more.close(); openFeedback(); }
+    if (action === "tour") {
+      // El tutorial recorre el Inicio: si estás en otra pantalla, vamos ahí
+      more.close();
+      if (location.pathname === "/dashboard.html") startTour();
+      else location.href = "/dashboard.html?tutorial=1";
+    }
     if (action === "signup") {
       // De la demo a una cuenta real: salimos de la demo y vamos al registro
       e.preventDefault();

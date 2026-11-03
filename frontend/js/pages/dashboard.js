@@ -5,6 +5,7 @@ import { openExpenseSheet } from "../expense-form.js";
 import { longToday, money, moneyExact, shortDate, shortRange, todayISO } from "../format.js";
 import { openIncomeSheet } from "../income-form.js";
 import { isInstalled, openInstall } from "../install.js";
+import { maybeStartTour, startTour } from "../tour.js";
 import { openPaySheet } from "../pay-form.js";
 import { categoryLabel, CATEGORY_COLOR, EXTRA_CATEGORY_LABELS, getCategories } from "../labels.js";
 import { mountShell } from "../shell.js";
@@ -462,7 +463,14 @@ async function init() {
     history.replaceState(null, "", "/dashboard.html");
     openExpenseSheet();
   }
-  load();
+  // El tutorial: pedido desde el menú (?tutorial=1) o la primera vez que entrás
+  await load();
+  if (new URLSearchParams(location.search).get("tutorial") === "1") {
+    history.replaceState(null, "", "/dashboard.html");
+    startTour();
+  } else {
+    maybeStartTour();
+  }
 }
 
 if (mountShell()) init();
