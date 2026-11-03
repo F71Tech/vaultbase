@@ -141,6 +141,9 @@ class FinanceData:
     goals: list[Goal] = field(default_factory=list)
     commissions: list[Commission] = field(default_factory=list)
     pay_records: list[PayRecord] = field(default_factory=list)
+    # Día en que el usuario empezó a usar la app (creó la cuenta). "Tu plata hoy"
+    # acumula desde el cobro anterior a ese día: lo que sobra de un mes pasa al otro.
+    joined: dt.date | None = None
 
 
 # --- Cobros reales ----------------------------------------------------------

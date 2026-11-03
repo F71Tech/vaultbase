@@ -15,7 +15,7 @@ from sqlmodel import Session, select
 
 from ..deps import CurrentUser, SessionDep
 from ..models import Commission, Currency, Expense, Goal, Income, PayRecord, Subscription, User, WishItem
-from ..models.common import today_uy
+from ..models.common import URUGUAY_TZ, today_uy
 from ..services import cashflow, finance, goal_plan
 from ..services.exchange import RateUnavailable, get_current_rate
 from ..services.simulator import InstallmentOption, SimulationResult, simulate_purchase
@@ -34,7 +34,14 @@ def _load_data(session: Session, user: User) -> finance.FinanceData:
         incomes=mine(Income), expenses=mine(Expense),
         subscriptions=mine(Subscription), goals=mine(Goal), commissions=mine(Commission),
         pay_records=mine(PayRecord),
+        joined=_uy_date(user.created_at),
     )
+
+
+def _uy_date(moment: dt.datetime) -> dt.date:
+    """Qué día era en Uruguay en ese momento (la base guarda las horas en UTC)."""
+    aware = moment if moment.tzinfo else moment.replace(tzinfo=dt.timezone.utc)
+    return aware.astimezone(URUGUAY_TZ).date()
 
 
 def _usd_rate(session: Session) -> float | None:

@@ -242,3 +242,32 @@ def test_api_ajustes_y_gasto_inusual(client, make_user):
                        headers=ana).json()
     plan = client.get(f"/api/finance/goals/{meta['id']}/plan?daily_cents=0&cushion_days=0", headers=ana).json()
     assert plan["budget"]["daily_cents"] == 0 and plan["budget"]["cushion_days"] == 0
+
+
+# --- Lo que sobra de un mes pasa al siguiente ---------------------------------
+
+def test_lo_que_sobra_de_un_mes_no_desaparece():
+    def caso(joined):
+        sueldo = Income(id=1, user_id=1, source="Sueldo", amount_cents=6_000_000, start_date=dt.date(2026, 1, 1), pay_day=1)
+        alquiler = Expense(id=1, user_id=1, category="housing", subcategory="rent", kind="fixed",
+                           amount_cents=1_500_000, date=dt.date(2026, 1, 5))
+        gastos = [gasto(1_000_000, dt.date(2026, 10, 20)), gasto(500_000, dt.date(2026, 11, 8))]
+        return finance.FinanceData(incomes=[sueldo], expenses=[alquiler, *gastos], joined=joined)
+
+    # Sin saber desde cuándo usa la app: solo el ciclo actual (1/11 a hoy)
+    assert money_now(caso(None), HOY, RATE).current_cents == 6_000_000 - 1_500_000 - 500_000
+    # Empezó a usar la app el 15/10: cuenta desde el cobro del 1/10 y arrastra lo que sobró
+    m = money_now(caso(dt.date(2026, 10, 15)), HOY, RATE)
+    assert m.tracked_from == dt.date(2026, 10, 1) and m.since == dt.date(2026, 11, 1)
+    assert m.received_cents == 2 * 6_000_000
+    assert m.current_cents == 12_000_000 - 2 * 1_500_000 - 1_000_000 - 500_000   # 7.500 de octubre siguen ahí
+
+
+def test_sueldo_como_unica_vez_antes_de_empezar_cuenta():
+    unico = Income(id=1, user_id=1, source="Sueldo", amount_cents=3_010_800, frequency="one_time",
+                   start_date=dt.date(2026, 10, 30))
+    data = finance.FinanceData(incomes=[unico], expenses=[gasto(400_000, dt.date(2026, 11, 5))],
+                               joined=dt.date(2026, 11, 2))
+    m = money_now(data, HOY, RATE)
+    assert m.tracked_from == dt.date(2026, 10, 30)
+    assert m.current_cents == 3_010_800 - 400_000          # ya no da negativo

@@ -40,9 +40,10 @@ class CashEvent(BaseModel):
 
 
 class MoneyNow(BaseModel):
-    received_cents: int               # lo que te entró desde tu último cobro
+    received_cents: int               # lo que te entró desde tracked_from
     spent_cents: int                  # lo que gastaste desde entonces (positivo)
-    current_cents: int                # plata de HOY = recibido - gastado
+    current_cents: int                # plata de HOY = recibido - gastado (acumulado)
+    tracked_from: dt.date             # desde cuándo se suma (el cobro anterior a crear tu cuenta)
     since: dt.date                    # tu último cobro (o el día 1 si no hay sueldo)
     next_pay: dt.date                 # tu próximo cobro
     period_end: dt.date               # el día antes del próximo cobro
@@ -235,6 +236,25 @@ def daily_spending(data: finance.FinanceData, today: dt.date, rate: float | None
     return monthly * 12 / 365
 
 
+def tracking_start(data: finance.FinanceData, since: dt.date, rate: float | None) -> dt.date:
+    """
+    Desde cuándo sumamos y restamos para "tu plata hoy": el cobro anterior al
+    día en que empezaste a usar la app (antes de eso no sabemos qué pasó con tu
+    plata). Si no sabemos cuándo empezaste, el último cobro.
+    """
+    if data.joined is None:
+        return since
+    if main_income(data, data.joined) is None:
+        # Sin sueldo mensual: desde el cobro único más cercano antes de empezar
+        # (ej: el sueldo del 30/10 cargado como "única vez", si te anotaste el 2/11)
+        recent = [i.start_date for i in data.incomes
+                  if i.frequency == IncomeFrequency.one_time and not i.food_only
+                  and data.joined - dt.timedelta(days=31) <= i.start_date <= since]
+        return min([since, *recent])
+    start, _ = pay_cycle(data, data.joined, rate)
+    return min(start, since)
+
+
 # --- El cálculo principal ---------------------------------------------------
 
 def money_now(
@@ -245,16 +265,28 @@ def money_now(
     period_end = next_pay - dt.timedelta(days=1)   # hasta el día antes del próximo sueldo
     days_left = (period_end - today).days + 1
 
-    # 1) Plata de hoy: todo lo que pasó desde tu último cobro hasta hoy
-    so_far = scheduled_events(data, since, today, rate) + logged_events(data, since, today, rate)
+    # 1) Plata de hoy: todo lo que entró menos todo lo que gastaste desde que
+    #    usás la app. ACUMULA: lo que te sobró del mes pasado sigue siendo tuyo.
+    tracked_from = tracking_start(data, since, rate)
+    so_far = scheduled_events(data, tracked_from, today, rate) + logged_events(data, tracked_from, today, rate)
     received = sum(ev.amount_cents for ev in so_far if ev.amount_cents > 0)
     spent = -sum(ev.amount_cents for ev in so_far if ev.amount_cents < 0)
-    # La comida pagada con el ticket de alimentación no salió de tu plata
-    ticket = finance.food_ticket_in_month(data, today.year, today.month, rate)
-    food = [e for e in data.expenses if finance.is_food(e) and since <= e.date <= today]
-    ticket_used = finance.ticket_split(food, ticket, rate) if ticket else 0
-    spent -= ticket_used
+    # La comida pagada con el ticket de alimentación no salió de tu plata (mes a mes:
+    # cada mes el ticket se carga y cubre la comida de ese mes)
+    covered = 0
+    for y, m in months_between(tracked_from, today):
+        first, last = finance.month_bounds(y, m)
+        food = [e for e in data.expenses if finance.is_food(e) and max(first, tracked_from) <= e.date <= min(last, today)]
+        month_ticket = finance.food_ticket_in_month(data, y, m, rate)
+        covered += finance.ticket_split(food, month_ticket, rate) if month_ticket else 0
+    spent -= covered
     current = received - spent
+
+    # Para mostrar: el ticket de ESTE mes (cuánto usaste y cuánto te queda)
+    ticket = finance.food_ticket_in_month(data, today.year, today.month, rate)
+    first_of_month = finance.month_bounds(today.year, today.month)[0]
+    food_now = [e for e in data.expenses if finance.is_food(e) and first_of_month <= e.date <= today]
+    ticket_used = finance.ticket_split(food_now, ticket, rate) if ticket else 0
 
     # 2) Lo que falta hasta tu próximo cobro (desde mañana: lo de hoy ya está en el punto 1)
     upcoming = scheduled_events(data, today + dt.timedelta(days=1), period_end, rate)
@@ -282,7 +314,7 @@ def money_now(
 
     return MoneyNow(
         received_cents=received, spent_cents=spent, current_cents=current,
-        since=since, next_pay=next_pay, period_end=period_end, days_left=days_left, upcoming=upcoming,
+        since=since, tracked_from=tracked_from, next_pay=next_pay, period_end=period_end, days_left=days_left, upcoming=upcoming,
         incoming_cents=incoming, incoming_high_cents=incoming_high,
         has_commissions=any(ev.kind == "commission" for ev in upcoming + so_far),
         bills_cents=bills, usual_spending_cents=usual,

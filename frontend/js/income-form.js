@@ -180,10 +180,14 @@ function ensureSheet() {
   });
 }
 
-export function openIncomeSheet(income = null) {
+/**
+ * Abre la hoja. Sin ingreso = uno nuevo. `prefill` completa campos de uno nuevo
+ * (ej: { source: "Plata que ya tenía", frequency: "one_time", start_date: "2026-10-30" }).
+ */
+export function openIncomeSheet(income = null, prefill = {}) {
   ensureSheet();
   editing = income;
-  const i = income ?? {};
+  const i = income ?? prefill;
   currency = i.currency ?? "UYU";
   $("#if-title").textContent = income ? "Editar ingreso" : "Nuevo ingreso";
   $("#if-source").value = i.source ?? "";

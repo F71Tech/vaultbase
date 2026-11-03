@@ -76,9 +76,13 @@ function renderMoney() {
         <div class="flex items-center gap-2 muted text-sm"><i data-lucide="wallet" class="w-4 h-4"></i>Tu plata hoy</div>
         <div class="font-display text-4xl font-bold mt-1 ${m.current_cents < 0 ? "text-danger" : ""}" id="money-current">$ 0</div>
         <div class="text-xs mt-2 space-y-0.5">
-          <div class="flex justify-between gap-3"><span class="muted">Te entró desde el ${shortDate(m.since)}</span><span class="text-success">+${money(m.received_cents)}</span></div>
+          <div class="flex justify-between gap-3"><span class="muted">Te entró desde el ${shortDate(m.tracked_from)}</span><span class="text-success">+${money(m.received_cents)}</span></div>
           <div class="flex justify-between gap-3"><span class="muted">Gastaste hasta hoy</span><span>−${money(m.spent_cents)}</span></div>
         </div>
+        ${m.tracked_from < m.since ? `<p class="muted text-xs mt-1">Incluye lo que te sobró de antes de tu último cobro (${shortDate(m.since)}): la plata no se "reinicia" cada mes.</p>` : ""}
+        ${m.current_cents < 0 ? `<div class="mt-3 rounded-xl bg-accent-soft p-3 text-xs">
+            <b>¿Tenías plata de antes del ${shortDate(m.tracked_from)}?</b> La app no la conoce, por eso da negativo.
+            <button class="text-primary font-semibold block mt-1" data-previous-money>Sumala una vez →</button></div>` : ""}
         ${m.ticket_cents ? `<p class="muted text-xs mt-2"><i data-lucide="ticket" class="inline w-3 h-3 text-accent"></i>
           Sin contar el ticket de alimentación: pagó ${money(m.ticket_used_cents)} de comida y te quedan ${money(m.ticket_left_cents)}.</p>` : ""}
       </div>
@@ -348,6 +352,10 @@ async function init() {
   $("food-pct").addEventListener("click", openFoodSheet);
   $("money").addEventListener("click", (e) => {
     if (e.target.closest("[data-pay-now]") && payInfo.salary) openPaySheet(payInfo.salary);
+    // Plata que ya tenías antes de usar la app: un ingreso único el día en que arranca el cálculo
+    if (e.target.closest("[data-previous-money]")) {
+      openIncomeSheet(null, { source: "Plata que ya tenía", frequency: "one_time", start_date: overview.money.tracked_from });
+    }
   });
   onDataChanged(load);
   document.addEventListener("vb:theme", renderCharts);  // los colores del gráfico cambian con el tema
