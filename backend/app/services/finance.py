@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from pydantic import BaseModel
 
 from ..models import (
-    Commission, Currency, Expense, ExpenseKind, Goal, Income, IncomeFrequency, Subscription,
+    Commission, Currency, Expense, ExpenseKind, Goal, Income, IncomeFrequency, PayRecord, Subscription,
     SubscriptionFrequency,
 )
 
@@ -140,6 +140,72 @@ class FinanceData:
     subscriptions: list[Subscription] = field(default_factory=list)
     goals: list[Goal] = field(default_factory=list)
     commissions: list[Commission] = field(default_factory=list)
+    pay_records: list[PayRecord] = field(default_factory=list)
+
+
+# --- Cobros reales ----------------------------------------------------------
+# Un sueldo mensual se cobra en dos partes: el adelanto (si hay) y "el cobro"
+# del día de cobro. Para cada parte:
+#   1) si anotaste el cobro REAL de ese mes, manda ese (con su fecha real);
+#   2) si no, y ya tenés algún cobro real anterior, se estima con el último
+#      (salvo sueldos con comisiones: esos usan el modelo de rangos);
+#   3) si no, lo que dice el ingreso (monto - adelanto).
+
+def on_day(year: int, month: int, day: int) -> dt.date:
+    """El día `day` del mes, sin pasarse: el "31" de febrero es el 28 (o 29)."""
+    return dt.date(year, month, min(day, calendar.monthrange(year, month)[1]))
+
+
+def pay_record_in_month(data: "FinanceData", income: Income, year: int, month: int, kind: str) -> PayRecord | None:
+    """El cobro real anotado para ese ingreso, ese mes y esa parte ("pay" o "advance")."""
+    return next((r for r in data.pay_records
+                 if r.income_id == income.id and getattr(r.kind, "value", r.kind) == kind
+                 and (r.date.year, r.date.month) == (year, month)), None)
+
+
+def last_pay_record(data: "FinanceData", income: Income, before: dt.date, kind: str = "pay") -> PayRecord | None:
+    """El último cobro real anotado ANTES de una fecha (para estimar los que vienen)."""
+    records = [r for r in data.pay_records
+               if r.income_id == income.id and getattr(r.kind, "value", r.kind) == kind and r.date < before]
+    return max(records, key=lambda r: r.date, default=None)
+
+
+@dataclass
+class PayParts:
+    advance_date: dt.date | None
+    advance_cents: int
+    pay_date: dt.date
+    pay_cents: int
+    status: str   # "real" (anotaste el cobro) | "last" (estimado con el último real) | "planned" (lo del ingreso)
+
+
+def pay_parts(data: "FinanceData", income: Income, year: int, month: int, rate: float | None) -> PayParts:
+    """Cuánto entra (y qué día) por un sueldo mensual en ese mes."""
+    amount = to_uyu(income.amount_cents, income.currency, rate)
+    advance = to_uyu(income.advance_cents, income.currency, rate) if income.advance_cents else 0
+    advance_date = on_day(year, month, income.advance_day or 15) if advance else None
+    rec = pay_record_in_month(data, income, year, month, "advance")
+    if rec is not None:
+        advance_date, advance = rec.date, rec.amount_cents
+
+    pay_date = on_day(year, month, income.pay_day)
+    rec = pay_record_in_month(data, income, year, month, "pay")
+    if rec is not None:
+        return PayParts(advance_date, advance, rec.date, rec.amount_cents, "real")
+    planned = amount - (to_uyu(income.advance_cents, income.currency, rate) if income.advance_cents else 0)
+    last = last_pay_record(data, income, pay_date) if income.commission_floor_cents is None else None
+    if last is not None:
+        return PayParts(advance_date, advance, pay_date, last.amount_cents, "last")
+    return PayParts(advance_date, advance, pay_date, planned, "planned")
+
+
+def income_total_in_month(data: "FinanceData", income: Income, year: int, month: int, rate: float | None) -> int:
+    """Como income_in_month, pero un sueldo mensual usa sus cobros reales (o el último real)."""
+    base = income_in_month(income, year, month, rate)
+    if income.frequency != IncomeFrequency.monthly or base == 0:
+        return base
+    parts = pay_parts(data, income, year, month, rate)
+    return parts.advance_cents + parts.pay_cents
 
 
 # --- Comisiones semanales ---------------------------------------------------
@@ -171,6 +237,9 @@ def commissions_in_month(data: "FinanceData", year: int, month: int, high: bool 
     """
     income = commission_income(data)
     if income is None and not data.commissions:
+        return 0
+    # Si ya anotaste el cobro real de ese mes, las comisiones vienen adentro
+    if income is not None and pay_record_in_month(data, income, year, month, "pay") is not None:
         return 0
     floor = (income.commission_floor_cents or 0) if income else 0
     by_week = {c.week_start: c for c in data.commissions}
@@ -210,7 +279,7 @@ def month_summary(
     trata como FUTURO: los gastos variables reales se reemplazan por esa estimación.
     """
     aguinaldo = sum(aguinaldo_in_month(i, year, month, rate) for i in data.incomes)
-    income = (sum(income_in_month(i, year, month, rate) for i in data.incomes) + aguinaldo
+    income = (sum(income_total_in_month(data, i, year, month, rate) for i in data.incomes) + aguinaldo
               + commissions_in_month(data, year, month))  # comisiones: escenario prudente
     subs = sum(subscription_in_month(s, year, month, rate) for s in data.subscriptions)
 
@@ -373,7 +442,7 @@ def savings_capacity(data: FinanceData, today: dt.date, rate: float | None) -> S
     """
     y, m = today.year, today.month
     recurring = sum(
-        income_in_month(i, y, m, rate) for i in data.incomes
+        income_total_in_month(data, i, y, m, rate) for i in data.incomes
         if i.frequency != IncomeFrequency.one_time and not i.food_only
     ) + commissions_in_month(data, y, m)  # comisiones de este mes, escenario prudente
     fixed = sum(

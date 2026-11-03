@@ -18,7 +18,6 @@ La idea (todo automático, sin pedirle nada al usuario):
 Funciones PURAS, montos en centésimos de peso uruguayo.
 """
 
-import calendar
 import datetime as dt
 
 from pydantic import BaseModel
@@ -70,9 +69,7 @@ class MoneyNow(BaseModel):
 
 # --- Fechas -----------------------------------------------------------------
 
-def on_day(year: int, month: int, day: int) -> dt.date:
-    """El día `day` del mes, sin pasarse: el "31" de febrero es el 28 (o 29)."""
-    return dt.date(year, month, min(day, calendar.monthrange(year, month)[1]))
+on_day = finance.on_day  # el día N del mes, sin pasarse (vive en finance: lo usan los dos)
 
 
 def months_between(start: dt.date, end: dt.date):
@@ -85,9 +82,16 @@ def months_between(start: dt.date, end: dt.date):
 
 # --- Eventos programados (los que tienen día fijo) --------------------------
 
-def income_events(income, start: dt.date, end: dt.date, rate: float | None) -> list[CashEvent]:
-    """Los cobros de un ingreso entre start y end (ambos incluidos)."""
+def income_events(
+    income, start: dt.date, end: dt.date, rate: float | None, data: finance.FinanceData | None = None,
+) -> list[CashEvent]:
+    """
+    Los cobros de un ingreso entre start y end (ambos incluidos).
+    data: para usar los cobros reales anotados (ver finance.pay_parts).
+    """
     amount = finance.to_uyu(income.amount_cents, income.currency, rate)
+    data = data or finance.FinanceData(incomes=[income])
+    status_label = {"real": " (real)", "last": " (estimado)", "planned": ""}
     events = []
 
     def add(date, cents, label, kind="income"):
@@ -99,10 +103,10 @@ def income_events(income, start: dt.date, end: dt.date, rate: float | None) -> l
         return []  # los únicos se tratan como un gasto anotado (ver más abajo)
     for y, m in months_between(start, end):
         if freq == IncomeFrequency.monthly:
-            advance = finance.to_uyu(income.advance_cents, income.currency, rate) if income.advance_cents else 0
-            if advance:
-                add(on_day(y, m, income.advance_day or 15), advance, f"Adelanto · {income.source}", "advance")
-            add(on_day(y, m, income.pay_day), amount - advance, income.source)
+            parts = finance.pay_parts(data, income, y, m, rate)
+            if parts.advance_cents:
+                add(parts.advance_date, parts.advance_cents, f"Adelanto · {income.source}", "advance")
+            add(parts.pay_date, parts.pay_cents, income.source + status_label[parts.status])
         elif freq == IncomeFrequency.biweekly:  # quincenal: el 1 y el 15
             add(dt.date(y, m, 1), amount, income.source)
             add(dt.date(y, m, 15), amount, income.source)
@@ -126,7 +130,7 @@ def scheduled_events(data: finance.FinanceData, start: dt.date, end: dt.date, ra
     for income in data.incomes:
         if income.food_only:
             continue  # el ticket de alimentación va a otra tarjeta: no es plata para el resto
-        events += income_events(income, start, end, rate)
+        events += income_events(income, start, end, rate, data)
 
     # Comisiones: se cobran con el sueldo (su día de cobro), en un rango mínimo-máximo
     com_income = finance.commission_income(data)
@@ -210,7 +214,7 @@ def pay_cycle(data: finance.FinanceData, today: dt.date, rate: float | None) -> 
     income = main_income(data, today)
     if income is not None:
         window = dt.timedelta(days=62)
-        pays = [ev.date for ev in income_events(income, today - window, today + window, rate) if ev.kind == "income"]
+        pays = [ev.date for ev in income_events(income, today - window, today + window, rate, data) if ev.kind == "income"]
         last = [d for d in pays if d <= today]
         nxt = [d for d in pays if d > today]
         if last and nxt:

@@ -33,6 +33,9 @@ def build_crud_router(
     # Paso extra antes de guardar (al crear y al editar), ej: completar la
     # cotización del dólar de un gasto en USD. Recibe (item, session).
     before_save=None,
+    # Paso extra antes de borrar, ej: borrar lo que depende de este registro
+    # (los cobros reales de un ingreso). Recibe (item, session).
+    before_delete=None,
 ) -> APIRouter:
     router = APIRouter(prefix=prefix, tags=[tag])
     nombre = tag.lower()
@@ -92,6 +95,8 @@ def build_crud_router(
                    summary=f"Borrar de {nombre}")
     def delete_item(item_id: int, session: SessionDep, user: CurrentUser):
         item = get_owned(session, user.id, item_id)
+        if before_delete:
+            before_delete(item, session)
         session.delete(item)
         session.commit()
         # 204 No Content: salió bien y no hay nada que devolver

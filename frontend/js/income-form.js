@@ -1,7 +1,7 @@
 // income-form.js · Hoja para cargar o editar un ingreso.
 
 import { api } from "./api.js";
-import { centsToInput, parseMoney, todayISO } from "./format.js";
+import { centsToInput, parseMoney, shortDate, toISO, todayISO } from "./format.js";
 import { FREQUENCY } from "./labels.js";
 import { confirmDialog, createSheet, notifyDataChanged, toast } from "./ui.js";
 
@@ -30,6 +30,12 @@ const template = `
       <label class="field"><span id="if-start-label">Desde</span><input id="if-start" type="date" class="input" /></label>
       <label class="field" id="if-end-wrap"><span>Hasta (vacío = sigue)</span><input id="if-end" type="date" class="input" /></label>
     </div>
+    <p id="if-onetime-warn" class="mt-3 rounded-xl bg-danger-soft p-3 text-xs flex gap-2 items-start" hidden>
+      <i data-lucide="circle-alert" class="w-4 h-4 text-danger shrink-0"></i>
+      <span><b>"Única vez" significa que no se repite:</b> la app va a dejar de contar este ingreso en los próximos meses
+        (y tu plata y tus metas van a dar mucho menos). Si tu sueldo varía, dejalo <b>Mensual</b> con el sueldo base
+        y anotá las comisiones aparte.</span>
+    </p>
     <label class="flex items-start gap-2 text-sm cursor-pointer mt-3">
       <input type="checkbox" id="if-food-only" style="accent-color:var(--accent)" class="w-4 h-4 mt-0.5" />
       <span>Es un <b>ticket de alimentación</b> (otra tarjeta, solo para comida)
@@ -82,7 +88,18 @@ function syncFields() {
   $("#if-advance").hidden = !$("#if-has-advance").checked;
   $("#if-commissions").hidden = !$("#if-has-commissions").checked;
   $("#if-salary-extras").hidden = $("#if-food-only").checked;  // un ticket no tiene adelanto ni comisiones
+  $("#if-onetime-warn").hidden = !(editing && editing.frequency !== "one_time" && oneTime);
   sheet.el.querySelectorAll("[data-currency]").forEach((b) => b.setAttribute("aria-pressed", b.dataset.currency === currency));
+}
+
+/** El último día de cobro de un ingreso mensual (hoy o antes). Ej: cobra el 30 -> 30/10 si hoy es 2/11. */
+function lastPayDate(income) {
+  const today = new Date();
+  const payDay = income.pay_day ?? 1;
+  const onDay = (y, m) => new Date(y, m, Math.min(payDay, new Date(y, m + 1, 0).getDate()));
+  let date = onDay(today.getFullYear(), today.getMonth());
+  if (date > today) date = onDay(today.getFullYear(), today.getMonth() - 1);
+  return toISO(date);
 }
 
 function ensureSheet() {
@@ -92,7 +109,14 @@ function ensureSheet() {
     const cur = e.target.closest("[data-currency]");
     if (cur) { currency = cur.dataset.currency; syncFields(); }
   });
-  $("#if-frequency").addEventListener("change", syncFields);
+  $("#if-frequency").addEventListener("change", () => {
+    // Pasar un ingreso que se repetía a "única vez": la fecha tiene que ser la
+    // del cobro (no el día en que empezó, que puede ser de hace meses)
+    if (editing && editing.frequency !== "one_time" && $("#if-frequency").value === "one_time") {
+      $("#if-start").value = lastPayDate(editing);
+    }
+    syncFields();
+  });
   $("#if-has-advance").addEventListener("change", syncFields);
   $("#if-has-commissions").addEventListener("change", syncFields);
   $("#if-food-only").addEventListener("change", () => {
@@ -142,7 +166,10 @@ function ensureSheet() {
     try {
       await api(editing ? `/api/incomes/${editing.id}` : "/api/incomes",
         { method: editing ? "PATCH" : "POST", body });
-      toast(editing ? "Ingreso actualizado" : "Ingreso guardado");
+      // Un cobro único solo aparece en la lista de SU mes: decimos cuál, para que no parezca perdido
+      toast(frequency === "one_time"
+        ? `Guardado como cobro único del ${shortDate(body.start_date)}`
+        : editing ? "Ingreso actualizado" : "Ingreso guardado");
       sheet.close();
       notifyDataChanged();
     } catch (err) {

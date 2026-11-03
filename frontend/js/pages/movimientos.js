@@ -5,6 +5,7 @@ import { commissionAmount, openCommissionSheet, payDateOf } from "../commission-
 import { openExpenseSheet } from "../expense-form.js";
 import { friendlyDay, money, moneyExact, monthLabel, shortDate, toISO } from "../format.js";
 import { openIncomeSheet } from "../income-form.js";
+import { openPaySheet } from "../pay-form.js";
 import { categoryLabel, CATEGORY_COLOR, FREQUENCY, getCategories } from "../labels.js";
 import { mountShell } from "../shell.js";
 import { countUp, esc, icons, onDataChanged } from "../ui.js";
@@ -12,7 +13,9 @@ import { countUp, esc, icons, onDataChanged } from "../ui.js";
 const now = new Date();
 const view = { year: now.getFullYear(), month: now.getMonth() + 1, tab: "expenses", category: null };
 let cats;
-let cache = { variable: [], fixed: [], incomes: [], summary: null, commissions: [], salary: null };
+let cache = {
+  variable: [], fixed: [], incomes: [], allIncomes: [], summary: null, commissions: [], payRecords: [], salary: null,
+};
 
 const $ = (id) => document.getElementById(id);
 
@@ -97,6 +100,19 @@ function renderExpenses() {
   icons();
 }
 
+// Debajo de cada sueldo mensual: el último cobro real y el botón para anotar uno nuevo
+function payRecordLine(income) {
+  if (income.frequency !== "monthly" || income.food_only) return "";
+  const last = cache.payRecords.filter((r) => r.income_id === income.id && r.kind === "pay")
+    .sort((a, b) => b.date.localeCompare(a.date))[0];
+  return `
+    <div class="flex items-center justify-between gap-2 pl-14 pr-2 -mt-1 mb-2 text-xs">
+      <span class="muted">${last ? `Último cobro real: <b class="text-primary">${money(last.amount_cents)}</b> (${shortDate(last.date)}) · los próximos se estiman con este`
+                                  : "Sin cobros reales anotados: se usa el monto de arriba"}</span>
+      <button class="chip shrink-0" data-pay-income="${income.id}"><i data-lucide="badge-check" class="w-3.5 h-3.5"></i>Anotar cobro</button>
+    </div>`;
+}
+
 function renderIncomes() {
   const list = cache.incomes;
   $("income-list").innerHTML = list.length
@@ -105,10 +121,10 @@ function renderIncomes() {
         <span class="icon-badge bg-primary-soft text-primary"><i data-lucide="trending-up"></i></span>
         <span class="flex-1 min-w-0">
           <span class="block font-medium truncate">${esc(i.source)}</span>
-          <span class="block muted text-xs">${i.food_only ? "Ticket · solo comida · " : ""}${FREQUENCY[i.frequency]} ·${i.frequency === "one_time" ? shortDate(i.start_date) : "desde " + shortDate(i.start_date)}${i.end_date ? " hasta " + shortDate(i.end_date) : ""}</span>
+          <span class="block muted text-xs">${i.food_only ? "Ticket · solo comida · " : ""}${FREQUENCY[i.frequency]} · ${i.frequency === "one_time" ? shortDate(i.start_date) : "desde " + shortDate(i.start_date)}${i.end_date ? " hasta " + shortDate(i.end_date) : ""}</span>
         </span>
         <span class="font-semibold text-primary">${moneyExact(i.amount_cents, i.currency)}</span>
-      </button>`).join("")
+      </button>${payRecordLine(i)}`).join("")
     : emptyState("wallet", "Cargá tu sueldo u otros ingresos para que los cálculos funcionen.");
   if (cache.summary) countUp($("total-income"), cache.summary.income_cents);
   renderCommissions();
@@ -144,16 +160,19 @@ async function load() {
   $("month-label").textContent = monthLabel(view.year, view.month);
   const range = monthRange();
   // Pedimos todo en paralelo (Promise.all) en vez de uno por uno: es más rápido
-  const [monthItems, fixedAll, incomes, summary, commissions] = await Promise.all([
+  const [monthItems, fixedAll, incomes, summary, commissions, payRecords] = await Promise.all([
     api(`/api/expenses?from_date=${range.from}&to_date=${range.to}&kind=variable&kind=one_off`),
     api("/api/expenses?kind=fixed&limit=1000"),
     api("/api/incomes"),
     api(`/api/finance/month?year=${view.year}&month=${view.month}`),
     api("/api/commissions"),
+    api("/api/pay-records"),
   ]);
   cache = {
     commissions,
+    payRecords,
     salary: incomes.find((i) => i.commission_floor_cents != null),  // el sueldo con comisiones
+    allIncomes: incomes,
     variable: monthItems,
     fixed: fixedAll.filter((e) => activeInMonth(e, "date", range)),
     incomes: incomes.filter((i) => i.frequency === "one_time"
@@ -195,6 +214,8 @@ async function init() {
       openExpenseSheet([...cache.variable, ...cache.fixed].find((x) => x.id === id));
     }
     if (inc) openIncomeSheet(cache.incomes.find((x) => x.id === Number(inc.dataset.income)));
+    const payBtn = t.closest("[data-pay-income]");
+    if (payBtn) openPaySheet(cache.allIncomes.find((x) => x.id === Number(payBtn.dataset.payIncome)));
     const com = t.closest("[data-commission]");
     if (com) openCommissionSheet(cache.commissions.find((x) => x.id === Number(com.dataset.commission)),
       { salaryPayDay: cache.salary?.pay_day ?? 30 });

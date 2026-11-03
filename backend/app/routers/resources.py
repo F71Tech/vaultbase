@@ -9,8 +9,8 @@ fechas, categoría y tipo (lo vamos a necesitar para el dashboard).
 import datetime as dt
 from typing import Annotated
 
-from fastapi import Query
-from sqlmodel import select
+from fastapi import HTTPException, Query, status
+from sqlmodel import delete, select
 
 from ..deps import CurrentUser, SessionDep
 from ..models import (
@@ -19,6 +19,7 @@ from ..models import (
     Expense, ExpenseCategory, ExpenseCreate, ExpenseKind, ExpenseRead, ExpenseUpdate,
     Goal, GoalCreate, GoalRead, GoalUpdate,
     Income, IncomeCreate, IncomeRead, IncomeUpdate,
+    PayRecord, PayRecordCreate, PayRecordRead, PayRecordUpdate,
     Subscription, SubscriptionCreate, SubscriptionRead, SubscriptionUpdate,
     WishItem, WishItemCreate, WishItemRead, WishItemUpdate,
 )
@@ -49,6 +50,23 @@ incomes_router = build_crud_router(
     order_by=Income.start_date,
     # al editar solo el monto o solo el adelanto, igual hay que revisar los dos juntos
     validate_item=lambda i: check_advance(i.advance_cents, i.amount_cents),
+    # al borrar un ingreso, se van con él sus cobros reales
+    before_delete=lambda income, session: session.exec(delete(PayRecord).where(PayRecord.income_id == income.id)),
+)
+
+
+def check_pay_record_income(record: PayRecord, session) -> None:
+    """El cobro tiene que ser de un ingreso TUYO (si no, 404: ni revelamos que existe)."""
+    income = session.get(Income, record.income_id)
+    if income is None or income.user_id != record.user_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Ingreso no encontrado")
+
+
+pay_records_router = build_crud_router(
+    model=PayRecord, create_schema=PayRecordCreate, read_schema=PayRecordRead,
+    update_schema=PayRecordUpdate, prefix="/api/pay-records", tag="Cobros reales",
+    order_by=PayRecord.date.desc(),
+    before_save=check_pay_record_income,
 )
 
 def check_commission(c: Commission) -> None:

@@ -11,6 +11,7 @@ from .expense import (
     Expense, ExpenseCategory, ExpenseCreate, ExpenseKind, ExpenseRead, ExpenseUpdate,
 )
 from .goal import Goal, GoalCreate, GoalRead, GoalUpdate
+from .pay_record import PayKind, PayRecord, PayRecordCreate, PayRecordRead, PayRecordUpdate
 from .income import Income, IncomeCreate, IncomeFrequency, IncomeRead, IncomeUpdate
 from .subscription import (
     Subscription, SubscriptionCreate, SubscriptionFrequency, SubscriptionRead,

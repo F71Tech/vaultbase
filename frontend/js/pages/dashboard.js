@@ -4,6 +4,7 @@ import { api } from "../api.js";
 import { openExpenseSheet } from "../expense-form.js";
 import { longToday, money, moneyExact, shortDate, shortRange, todayISO } from "../format.js";
 import { openIncomeSheet } from "../income-form.js";
+import { openPaySheet } from "../pay-form.js";
 import { categoryLabel, CATEGORY_COLOR, EXTRA_CATEGORY_LABELS, getCategories } from "../labels.js";
 import { mountShell } from "../shell.js";
 import {
@@ -69,7 +70,7 @@ function renderMoney() {
   const end = shortDate(m.period_end);
   const short = m.short_cents > 0;
 
-  box.innerHTML = `
+  box.innerHTML = payReminder() + `
     <div class="grid gap-5 xl:gap-8 md:grid-cols-[13rem_1fr] xl:grid-cols-[13rem_1fr_17rem]">
       <div>
         <div class="flex items-center gap-2 muted text-sm"><i data-lucide="wallet" class="w-4 h-4"></i>Tu plata hoy</div>
@@ -302,8 +303,34 @@ function openFoodSheet() {
   foodSheet.open();
 }
 
+// --- Recordatorio del día de cobro: "¿cuánto te entró?" ---
+// Durante la semana después de cada cobro del sueldo, si todavía no anotaste
+// el cobro real de ese mes, lo pedimos (así los cálculos usan el número real).
+let payInfo = { salary: null, records: [] };
+
+function payReminder() {
+  const { salary, records } = payInfo;
+  const since = overview.money.since;
+  if (!salary) return "";
+  const days = (Date.now() - new Date(since + "T00:00")) / 86400000;
+  const logged = records.some((r) => r.income_id === salary.id && r.kind === "pay" && r.date.slice(0, 7) === since.slice(0, 7));
+  if (days > 7 || logged) return "";
+  return `
+    <div class="mb-4 rounded-xl bg-accent-soft p-3 flex flex-wrap gap-3 items-center">
+      <i data-lucide="badge-check" class="w-5 h-5 text-accent shrink-0"></i>
+      <span class="flex-1 min-w-[12rem] text-sm"><b>El ${shortDate(since)} cobraste.</b> ¿Cuánto te entró? Anotalo y los cálculos usan el número real.</span>
+      <button class="btn btn-primary text-sm py-2" data-pay-now>Anotar cobro</button>
+    </div>`;
+}
+
 async function load() {
-  overview = await api("/api/finance/overview");
+  const [ov, incomes, records] = await Promise.all([
+    api("/api/finance/overview"), api("/api/incomes"), api("/api/pay-records"),
+  ]);
+  overview = ov;
+  // El sueldo principal: el ingreso mensual más grande (que no sea el ticket)
+  const monthly = incomes.filter((i) => i.frequency === "monthly" && !i.food_only);
+  payInfo = { salary: monthly.sort((a, b) => b.amount_cents - a.amount_cents)[0] ?? null, records };
   renderMoney();
   renderStats();
   renderCharts();
@@ -318,7 +345,11 @@ async function init() {
   $("today").textContent = longToday();
   cats = await getCategories();
   $("onboard-income").addEventListener("click", () => openIncomeSheet());
-  $("food-pct").addEventListener("click", openFoodSheet);  onDataChanged(load);
+  $("food-pct").addEventListener("click", openFoodSheet);
+  $("money").addEventListener("click", (e) => {
+    if (e.target.closest("[data-pay-now]") && payInfo.salary) openPaySheet(payInfo.salary);
+  });
+  onDataChanged(load);
   document.addEventListener("vb:theme", renderCharts);  // los colores del gráfico cambian con el tema
   loadRate();
   load();
