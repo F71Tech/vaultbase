@@ -253,7 +253,9 @@ def month_summary(
 
 # --- Capacidad de ahorro ----------------------------------------------------
 
-def average_variable_expenses(data: FinanceData, today: dt.date, rate: float | None, months: int = 3) -> int:
+def average_variable_expenses(
+    data: FinanceData, today: dt.date, rate: float | None, months: int = 3, only_food: bool = False,
+) -> int:
     """
     Promedio de gastos variables de los últimos `months` meses COMPLETOS.
 
@@ -261,11 +263,13 @@ def average_variable_expenses(data: FinanceData, today: dt.date, rate: float | N
     este mes, los meses anteriores en 0 bajarían el promedio sin razón).
     Si no hay ningún mes completo con datos, usa lo gastado en el mes actual.
     Los gastos PUNTUALES no entran: no son "lo que solés gastar".
+    only_food=True: solo la comida (para saber cuánto cubre el ticket).
     """
-    variables = [e for e in data.expenses if e.kind == ExpenseKind.variable]
-    if not variables:
+    all_variables = [e for e in data.expenses if e.kind == ExpenseKind.variable]
+    if not all_variables:
         return 0
-    first_date = min(e.date for e in variables)
+    first_date = min(e.date for e in all_variables)
+    variables = [e for e in all_variables if not only_food or _category(e) == FOOD_CATEGORY]
     totals = []
     for back in range(1, months + 1):
         year, month = add_months(today.year, today.month, -back)
@@ -312,11 +316,40 @@ def unusual_expense(data: FinanceData, expense: Expense, rate: float | None) -> 
                         typical_cents=None)
 
 
+# --- Ticket de alimentación -------------------------------------------------
+# Es otra tarjeta que solo sirve para comida. Regla: la comida se paga PRIMERO
+# con el ticket (hasta que se acaba), salvo que el usuario diga lo contrario en
+# el gasto (paid_with_ticket True/False).
+
+def food_ticket_in_month(data: FinanceData, year: int, month: int, rate: float | None) -> int:
+    """Cuánto te cargan en el ticket de alimentación ese mes."""
+    return sum(income_in_month(i, year, month, rate) for i in data.incomes if i.food_only)
+
+
+def is_food(expense: Expense) -> bool:
+    return _category(expense) == FOOD_CATEGORY and expense.kind != ExpenseKind.fixed
+
+
+def ticket_split(food_expenses: list[Expense], ticket_cents: int, rate: float | None) -> int:
+    """
+    De estos gastos de comida, ¿cuánto se pagó con el ticket?
+      - marcados "con ticket": todo con ticket;
+      - marcados "con mi plata": nada;
+      - sin marcar: con el ticket mientras quede saldo (en orden de fecha).
+    """
+    amount = lambda e: to_uyu(e.amount_cents, e.currency, e.exchange_rate or rate)  # noqa: E731
+    used = sum(amount(e) for e in food_expenses if e.paid_with_ticket is True)
+    for e in sorted((e for e in food_expenses if e.paid_with_ticket is None), key=lambda e: e.date):
+        used += min(amount(e), max(ticket_cents - used, 0))
+    return used
+
+
 class SavingsCapacity(BaseModel):
-    recurring_income_cents: int       # ingresos que se repiten (sin los únicos)
+    recurring_income_cents: int       # ingresos que se repiten (sin los únicos ni el ticket)
     fixed_costs_cents: int            # gastos fijos + suscripciones
     disposable_income_cents: int      # ingreso disponible = ingresos - fijos
-    avg_variable_expenses_cents: int  # promedio de gastos variables
+    avg_variable_expenses_cents: int  # promedio de gastos variables que salen de TU plata
+    food_ticket_cents: int            # ticket de alimentación por mes (solo comida)
     monthly_savings_cents: int        # ahorro mensual disponible
 
 
@@ -341,17 +374,22 @@ def savings_capacity(data: FinanceData, today: dt.date, rate: float | None) -> S
     y, m = today.year, today.month
     recurring = sum(
         income_in_month(i, y, m, rate) for i in data.incomes
-        if i.frequency != IncomeFrequency.one_time
+        if i.frequency != IncomeFrequency.one_time and not i.food_only
     ) + commissions_in_month(data, y, m)  # comisiones de este mes, escenario prudente
     fixed = sum(
         expense_in_month(e, y, m, rate) for e in data.expenses if e.kind == ExpenseKind.fixed
     ) + sum(subscription_in_month(s, y, m, rate) for s in data.subscriptions)
-    avg_variable = average_variable_expenses(data, today, rate)
+    # El ticket no es plata libre: no suma al ingreso, pero cubre comida (hasta su monto),
+    # así que esa parte de tus gastos no sale de tu plata. Si comés menos que el ticket,
+    # lo que sobra queda en la tarjeta: no se puede ahorrar para una meta.
+    ticket = food_ticket_in_month(data, y, m, rate)
+    covered = min(average_variable_expenses(data, today, rate, only_food=True), ticket)
+    avg_variable = average_variable_expenses(data, today, rate) - covered
     disposable = recurring - fixed
     return SavingsCapacity(
         recurring_income_cents=recurring, fixed_costs_cents=fixed,
         disposable_income_cents=disposable, avg_variable_expenses_cents=avg_variable,
-        monthly_savings_cents=disposable - avg_variable,
+        food_ticket_cents=ticket, monthly_savings_cents=disposable - avg_variable,
     )
 
 
@@ -397,6 +435,9 @@ class FoodBudget(BaseModel):
     remaining_cents: int
     by_subcategory: dict[str, int]
     weeks: list[FoodWeek]
+    ticket_cents: int        # ticket de alimentación del mes (se suma al presupuesto)
+    ticket_used_cents: int   # lo que ya gastaste con el ticket este mes
+    ticket_left_cents: int   # lo que te queda en la tarjeta
 
 
 def food_budget(
@@ -410,7 +451,9 @@ def food_budget(
     """
     first, last = month_bounds(today.year, today.month)
     days_in_month = last.day
-    monthly = max(capacity.disposable_income_cents, 0) * percentage // 100
+    # Tu parte (el % de tu plata disponible) + lo que te cargan en el ticket
+    ticket = capacity.food_ticket_cents
+    monthly = max(capacity.disposable_income_cents, 0) * percentage // 100 + ticket
 
     food = [
         e for e in data.expenses
@@ -438,9 +481,11 @@ def food_budget(
         start = end + dt.timedelta(days=1)
 
     spent_total = sum(by_sub.values())
+    ticket_used = ticket_split(food, ticket, rate) if ticket else 0
     return FoodBudget(
         percentage=percentage, monthly_budget_cents=monthly, spent_cents=spent_total,
         remaining_cents=monthly - spent_total, by_subcategory=by_sub, weeks=weeks,
+        ticket_cents=ticket, ticket_used_cents=ticket_used, ticket_left_cents=max(ticket - ticket_used, 0),
     )
 
 

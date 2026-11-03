@@ -71,6 +71,9 @@ class ExpenseBase(SQLModel):
     # Guardarla congela el valor histórico: un gasto de marzo no cambia si el
     # dólar sube en noviembre. En la Etapa 2 se completa automáticamente.
     exchange_rate: float | None = Field(default=None, gt=0)
+    # Comida: ¿con qué la pagaste? True = ticket de alimentación, False = tu
+    # plata, None = automático (la comida se paga primero con el ticket).
+    paid_with_ticket: bool | None = None
 
 
 class Expense(ExpenseBase, table=True):
@@ -94,7 +97,7 @@ class ExpenseRead(ExpenseBase):
 
 
 class ExpenseUpdate(UpdateSchema):
-    nullable_fields = {"subcategory", "end_date", "description", "exchange_rate"}
+    nullable_fields = {"subcategory", "end_date", "description", "exchange_rate", "paid_with_ticket"}
 
     category: ExpenseCategory | None = None
     subcategory: str | None = Field(default=None, max_length=30)
@@ -105,3 +108,4 @@ class ExpenseUpdate(UpdateSchema):
     end_date: dt.date | None = None
     description: str | None = Field(default=None, max_length=120)
     exchange_rate: float | None = Field(default=None, gt=0)
+    paid_with_ticket: bool | None = None

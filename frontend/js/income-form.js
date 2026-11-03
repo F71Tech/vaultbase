@@ -30,10 +30,16 @@ const template = `
       <label class="field"><span id="if-start-label">Desde</span><input id="if-start" type="date" class="input" /></label>
       <label class="field" id="if-end-wrap"><span>Hasta (vacío = sigue)</span><input id="if-end" type="date" class="input" /></label>
     </div>
+    <label class="flex items-start gap-2 text-sm cursor-pointer mt-3">
+      <input type="checkbox" id="if-food-only" style="accent-color:var(--accent)" class="w-4 h-4 mt-0.5" />
+      <span>Es un <b>ticket de alimentación</b> (otra tarjeta, solo para comida)
+        <span class="muted text-xs block">No se suma a tu plata libre: paga primero tus gastos de comida.</span></span>
+    </label>
     <!-- Solo para ingresos mensuales: QUÉ DÍA entra la plata (lo usa "Tu plata hoy") -->
     <div id="if-monthly" class="mt-3 space-y-3">
       <label class="field"><span>Día de cobro</span>
         <input id="if-pay-day" class="input" type="number" min="1" max="31" inputmode="numeric" placeholder="1" /></label>
+      <div id="if-salary-extras" class="space-y-3">
       <label class="flex items-center gap-2 text-sm cursor-pointer">
         <input type="checkbox" id="if-has-advance" style="accent-color:var(--primary)" class="w-4 h-4" />
         Cobro un adelanto fijo antes
@@ -57,6 +63,7 @@ const template = `
         <p class="muted text-xs">Importante: en <b>Monto</b> poné solo lo que te entra de <b>sueldo base</b> (sin comisiones), sumando el adelanto.
           Las comisiones las anotás cada semana en <b>Movimientos → Ingresos → Comisiones</b> (con un rango si no sabés el monto exacto).</p>
       </div>
+      </div>
     </div>
     <p class="form-error my-3" id="if-error"></p>
     <div class="flex gap-3">
@@ -74,6 +81,7 @@ function syncFields() {
   $("#if-monthly").hidden = $("#if-frequency").value !== "monthly";
   $("#if-advance").hidden = !$("#if-has-advance").checked;
   $("#if-commissions").hidden = !$("#if-has-commissions").checked;
+  $("#if-salary-extras").hidden = $("#if-food-only").checked;  // un ticket no tiene adelanto ni comisiones
   sheet.el.querySelectorAll("[data-currency]").forEach((b) => b.setAttribute("aria-pressed", b.dataset.currency === currency));
 }
 
@@ -87,6 +95,10 @@ function ensureSheet() {
   $("#if-frequency").addEventListener("change", syncFields);
   $("#if-has-advance").addEventListener("change", syncFields);
   $("#if-has-commissions").addEventListener("change", syncFields);
+  $("#if-food-only").addEventListener("change", () => {
+    if ($("#if-food-only").checked && !$("#if-source").value.trim()) $("#if-source").value = "Ticket alimentación";
+    syncFields();
+  });
   $("#if-delete").addEventListener("click", async () => {
     if (!(await confirmDialog("¿Borrar este ingreso?"))) return;
     await api(`/api/incomes/${editing.id}`, { method: "DELETE" });
@@ -106,19 +118,21 @@ function ensureSheet() {
       start_date: $("#if-start").value || todayISO(),
       end_date: frequency === "one_time" ? null : ($("#if-end").value || null),
       advance_cents: null, advance_day: null, commission_floor_cents: null,
+      food_only: $("#if-food-only").checked,
     };
+    const extras = !body.food_only;  // el ticket no tiene adelanto ni comisiones
     if (frequency === "monthly") {
       const day = (id, fallback) => Number($(id).value || fallback);
       body.pay_day = day("#if-pay-day", 1);
       if (!(body.pay_day >= 1 && body.pay_day <= 31)) return ($("#if-error").textContent = "El día de cobro va de 1 a 31.");
-      if ($("#if-has-advance").checked) {
+      if (extras && $("#if-has-advance").checked) {
         body.advance_cents = parseMoney($("#if-advance-amount").value);
         body.advance_day = day("#if-advance-day", 15);
         if (!body.advance_cents) return ($("#if-error").textContent = "Escribí el monto del adelanto.");
         if (body.advance_cents >= amount) return ($("#if-error").textContent = "El adelanto tiene que ser menor que el total del mes.");
         if (!(body.advance_day >= 1 && body.advance_day <= 31)) return ($("#if-error").textContent = "El día del adelanto va de 1 a 31.");
       }
-      if ($("#if-has-commissions").checked) {
+      if (extras && $("#if-has-commissions").checked) {
         const floorText = $("#if-floor").value.trim();
         body.commission_floor_cents = floorText ? parseMoney(floorText) : 0;
         if (body.commission_floor_cents === null) return ($("#if-error").textContent = "Revisá el bono mínimo.");
@@ -155,6 +169,7 @@ export function openIncomeSheet(income = null) {
   $("#if-advance-amount").value = i.advance_cents ? centsToInput(i.advance_cents) : "";
   $("#if-advance-day").value = i.advance_day ?? 15;
   $("#if-has-commissions").checked = i.commission_floor_cents != null;
+  $("#if-food-only").checked = Boolean(i.food_only);
   $("#if-floor").value = i.commission_floor_cents ? centsToInput(i.commission_floor_cents) : "";
   $("#if-delete").hidden = !income;
   $("#if-error").textContent = "";

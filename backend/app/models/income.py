@@ -38,6 +38,9 @@ class IncomeBase(SQLModel):
     # Sueldos con comisiones semanales: el bono mínimo que cobrás por semana si
     # la comisión no llega (ej: $ 3.000). None = este ingreso no tiene comisiones.
     commission_floor_cents: int | None = Field(default=None, ge=0)
+    # Ticket de alimentación (u otra tarjeta que solo sirve para comida): es un
+    # ingreso real, pero no es plata libre. Paga tus gastos de comida primero.
+    food_only: bool = False
 
 
 def check_advance(advance_cents: int | None, amount_cents: int | None) -> None:
@@ -84,3 +87,4 @@ class IncomeUpdate(UpdateSchema):
     advance_cents: int | None = Field(default=None, gt=0)
     advance_day: int | None = Field(default=None, ge=1, le=31)
     commission_floor_cents: int | None = Field(default=None, ge=0)
+    food_only: bool | None = None

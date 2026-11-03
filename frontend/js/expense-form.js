@@ -14,7 +14,10 @@ import { confirmDialog, createSheet, esc, icons, notifyDataChanged, toast } from
 let sheet;          // la hoja se crea una sola vez y se reutiliza
 let editing = null; // gasto que se está editando (null = gasto nuevo)
 let openedKind = "variable"; // con qué tipo se abrió la hoja ("+" = variable)
-const state = { category: "food", subcategory: null, currency: "UYU", kind: "variable" };
+const state = { category: "food", subcategory: null, currency: "UYU", kind: "variable", ticket: null };
+// Ticket de alimentación del usuario: cuánto le cargan y cuánto le queda (se pide al abrir)
+let ticket = { cents: 0, left: 0 };
+let payTouched = false;  // el usuario eligió el medio de pago a mano
 
 function template(cats) {
   const catButtons = cats.list.map((c) => `
@@ -41,6 +44,14 @@ function template(cats) {
     <p id="ef-fixed-hint" class="text-xs rounded-xl bg-primary-soft p-2.5 mb-4 flex gap-2 items-center" hidden>
       <i data-lucide="repeat" class="w-4 h-4 text-primary shrink-0"></i>
       <span>Esto suele repetirse todos los meses: lo marcamos como <b>gasto fijo</b>. Si no, cambialo en "Tipo".</span></p>
+    <div id="ef-pay-wrap" class="mb-4" hidden>
+      <div class="text-sm mb-2">¿Con qué pagaste?</div>
+      <div class="segmented flex w-full" role="group" aria-label="Medio de pago">
+        <button type="button" class="flex-1 text-center" data-pay="ticket">Ticket alimentación</button>
+        <button type="button" class="flex-1 text-center" data-pay="cash">Mi plata</button>
+      </div>
+      <p class="muted text-xs mt-1" id="ef-ticket-left"></p>
+    </div>
     <label class="flex items-start gap-2 text-sm mb-4 cursor-pointer" id="ef-oneoff-wrap">
       <input type="checkbox" id="ef-oneoff" class="w-4 h-4 mt-0.5" style="accent-color:var(--accent)" />
       <span>Fue algo <b>puntual</b> <span class="muted text-xs block">No lo gastás seguido (una campera, un regalo…): no cuenta para tu gasto diario promedio. Puede tener fecha futura.</span></span>
@@ -85,6 +96,14 @@ function renderSelection(cats) {
     <button type="button" class="chip" data-sub="${s.key}" aria-pressed="${s.key === state.subcategory}">
       ${esc(s.label)}</button>`).join("");
   $("#ef-end-wrap").hidden = $("#ef-kind").value !== "fixed";
+  // Comida + tenés ticket: ¿con qué pagaste? (null = automático: ticket si queda saldo)
+  const showPay = ticket.cents > 0 && state.category === "food" && $("#ef-kind").value !== "fixed";
+  $("#ef-pay-wrap").hidden = !showPay;
+  sheet.el.querySelectorAll("[data-pay]").forEach((b) =>
+    b.setAttribute("aria-pressed", state.ticket === (b.dataset.pay === "ticket")));
+  $("#ef-ticket-left").textContent = state.ticket === null
+    ? "Automático: se paga con el ticket mientras te quede saldo."
+    : `Te quedan ${money(ticket.left)} en el ticket desde tu último cobro.`;
   // La casilla "puntual" y el select "Tipo" muestran lo mismo
   $("#ef-oneoff").checked = $("#ef-kind").value === "one_off";
   $("#ef-oneoff-wrap").hidden = $("#ef-kind").value === "fixed";
@@ -118,6 +137,8 @@ async function ensureSheet() {
     const cat = e.target.closest("[data-cat]");
     const sub = e.target.closest("[data-sub]");
     const cur = e.target.closest("[data-currency]");
+    const pay = e.target.closest("[data-pay]");
+    if (pay) { state.ticket = pay.dataset.pay === "ticket"; payTouched = true; renderSelection(cats); }
     if (cat) { state.category = cat.dataset.cat; state.subcategory = null; }
     if (sub) {
       state.subcategory = state.subcategory === sub.dataset.sub ? null : sub.dataset.sub;
@@ -155,6 +176,8 @@ async function onSave() {
     date: $("#ef-date").value || todayISO(),
     end_date: kind === "fixed" ? ($("#ef-end").value || null) : null,
     description: $("#ef-description").value.trim() || null,
+    // Solo tiene sentido en comida (si no, vuelve a "automático")
+    paid_with_ticket: $("#ef-pay-wrap").hidden ? null : state.ticket,
   };
   const btn = $("#ef-save");
   btn.disabled = true;
@@ -247,7 +270,18 @@ export async function openExpenseSheet(expense = null, { kind = "variable" } = {
   $("#ef-delete").hidden = !expense;
   $("#ef-fixed-hint").hidden = true;
   $("#ef-error").textContent = "";
+  // Medio de pago: al editar, lo que tenía; si es nuevo, ticket mientras quede saldo
+  state.ticket = expense ? (e.paid_with_ticket ?? null) : ticket.left > 0;
   sheet.render();
   icons();
   sheet.open();
+  // El saldo del ticket se pide en segundo plano, para no demorar la apertura del "+"
+  const opened = expense;
+  api("/api/finance/money").then((m) => {
+    ticket = { cents: m.ticket_cents, left: m.ticket_left_cents };
+    if (editing !== opened) return;               // ya se abrió otro gasto
+    if (!expense && !payTouched) state.ticket = ticket.left > 0;
+    sheet.render();
+  }).catch(() => { /* sin datos del ticket: la opción simplemente no aparece */ });
+  payTouched = false;
 }

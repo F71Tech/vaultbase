@@ -78,6 +78,8 @@ function renderMoney() {
           <div class="flex justify-between gap-3"><span class="muted">Te entró desde el ${shortDate(m.since)}</span><span class="text-success">+${money(m.received_cents)}</span></div>
           <div class="flex justify-between gap-3"><span class="muted">Gastaste hasta hoy</span><span>−${money(m.spent_cents)}</span></div>
         </div>
+        ${m.ticket_cents ? `<p class="muted text-xs mt-2"><i data-lucide="ticket" class="inline w-3 h-3 text-accent"></i>
+          Sin contar el ticket de alimentación: pagó ${money(m.ticket_used_cents)} de comida y te quedan ${money(m.ticket_left_cents)}.</p>` : ""}
       </div>
 
       <div class="grid grid-cols-2 gap-3 content-start">
@@ -226,6 +228,15 @@ function renderFood() {
   $("food-remaining").classList.toggle("text-danger", f.remaining_cents < 0);
   $("food-caption").textContent = f.remaining_cents < 0
     ? `te pasaste de ${money(f.monthly_budget_cents)}` : `te quedan de ${money(f.monthly_budget_cents)}`;
+  $("food-ticket").hidden = !f.ticket_cents;
+  if (f.ticket_cents) {
+    const pct = Math.min((f.ticket_used_cents / f.ticket_cents) * 100, 100);
+    $("food-ticket").innerHTML = `
+      <div class="muted text-xs flex items-center gap-1.5"><i data-lucide="ticket" class="w-3.5 h-3.5 text-accent"></i>Ticket alimentación</div>
+      <div class="font-semibold mt-0.5">Te quedan ${money(f.ticket_left_cents)}</div>
+      <div class="bar mt-2" style="height:6px"><span data-fill="${pct}" style="background:var(--accent)"></span></div>
+      <div class="muted text-xs mt-1">Usaste ${money(f.ticket_used_cents)} de ${money(f.ticket_cents)} este mes</div>`;
+  }
   $("food-weeks").innerHTML = f.weeks.map((w) => {
     const pct = w.budget_cents ? Math.min((w.spent_cents / w.budget_cents) * 100, 100) : 0;
     const over = w.spent_cents > w.budget_cents;

@@ -41,7 +41,8 @@ function expenseRow(e, detail) {
         <i data-lucide="${cat?.icon || "circle"}"></i></span>
       <span class="flex-1 min-w-0">
         <span class="block font-medium truncate">${esc(title)}${e.kind === "one_off"
-          ? ` <span class="chip text-accent align-middle" style="padding:1px 8px;font-size:.65rem">Puntual</span>` : ""}</span>
+          ? ` <span class="chip text-accent align-middle" style="padding:1px 8px;font-size:.65rem">Puntual</span>` : ""}${e.paid_with_ticket
+          ? ` <span class="chip text-accent align-middle" style="padding:1px 8px;font-size:.65rem">Ticket</span>` : ""}</span>
         <span class="block muted text-xs truncate">${esc(detail)}</span>
       </span>
       <span class="text-right font-semibold">${moneyExact(e.amount_cents, e.currency)}${pesos}</span>
@@ -104,7 +105,7 @@ function renderIncomes() {
         <span class="icon-badge bg-primary-soft text-primary"><i data-lucide="trending-up"></i></span>
         <span class="flex-1 min-w-0">
           <span class="block font-medium truncate">${esc(i.source)}</span>
-          <span class="block muted text-xs">${FREQUENCY[i.frequency]} · ${i.frequency === "one_time" ? shortDate(i.start_date) : "desde " + shortDate(i.start_date)}${i.end_date ? " hasta " + shortDate(i.end_date) : ""}</span>
+          <span class="block muted text-xs">${i.food_only ? "Ticket · solo comida · " : ""}${FREQUENCY[i.frequency]} ·${i.frequency === "one_time" ? shortDate(i.start_date) : "desde " + shortDate(i.start_date)}${i.end_date ? " hasta " + shortDate(i.end_date) : ""}</span>
         </span>
         <span class="font-semibold text-primary">${moneyExact(i.amount_cents, i.currency)}</span>
       </button>`).join("")

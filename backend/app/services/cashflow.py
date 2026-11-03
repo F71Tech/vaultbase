@@ -62,6 +62,10 @@ class MoneyNow(BaseModel):
     save_pct: int                    # % de la plata libre que podés ahorrar
     daily_spending_cents: int         # cuánto gastar por día
     short_cents: int                  # > 0 si a tu ritmo no llegás a fin de mes
+    # Ticket de alimentación (otra tarjeta, solo comida): no está en "tu plata"
+    ticket_cents: int
+    ticket_used_cents: int            # comida que pagaste con el ticket desde tu último cobro
+    ticket_left_cents: int
 
 
 # --- Fechas -----------------------------------------------------------------
@@ -120,6 +124,8 @@ def scheduled_events(data: finance.FinanceData, start: dt.date, end: dt.date, ra
     """Cobros, gastos fijos y suscripciones con fecha entre start y end."""
     events = []
     for income in data.incomes:
+        if income.food_only:
+            continue  # el ticket de alimentación va a otra tarjeta: no es plata para el resto
         events += income_events(income, start, end, rate)
 
     # Comisiones: se cobran con el sueldo (su día de cobro), en un rango mínimo-máximo
@@ -190,7 +196,7 @@ def main_income(data: finance.FinanceData, today: dt.date):
     """El sueldo principal: el ingreso mensual vigente más grande (o None)."""
     monthly = [
         i for i in data.incomes
-        if i.frequency == IncomeFrequency.monthly and i.start_date <= today
+        if i.frequency == IncomeFrequency.monthly and not i.food_only and i.start_date <= today
         and (i.end_date is None or i.end_date >= today)
     ]
     return max(monthly, key=lambda i: i.amount_cents, default=None)
@@ -214,8 +220,15 @@ def pay_cycle(data: finance.FinanceData, today: dt.date, rate: float | None) -> 
 
 
 def daily_spending(data: finance.FinanceData, today: dt.date, rate: float | None) -> float:
-    """Lo que solés gastar por día en el día a día (promedio mensual / días del mes)."""
-    return finance.average_variable_expenses(data, today, rate) * 12 / 365
+    """
+    Lo que solés gastar por día en el día a día DE TU PLATA (promedio mensual /
+    días del mes). La comida que cubre el ticket de alimentación no cuenta.
+    """
+    monthly = finance.average_variable_expenses(data, today, rate)
+    ticket = finance.food_ticket_in_month(data, today.year, today.month, rate)
+    if ticket:
+        monthly -= min(finance.average_variable_expenses(data, today, rate, only_food=True), ticket)
+    return monthly * 12 / 365
 
 
 # --- El cálculo principal ---------------------------------------------------
@@ -232,6 +245,11 @@ def money_now(
     so_far = scheduled_events(data, since, today, rate) + logged_events(data, since, today, rate)
     received = sum(ev.amount_cents for ev in so_far if ev.amount_cents > 0)
     spent = -sum(ev.amount_cents for ev in so_far if ev.amount_cents < 0)
+    # La comida pagada con el ticket de alimentación no salió de tu plata
+    ticket = finance.food_ticket_in_month(data, today.year, today.month, rate)
+    food = [e for e in data.expenses if finance.is_food(e) and since <= e.date <= today]
+    ticket_used = finance.ticket_split(food, ticket, rate) if ticket else 0
+    spent -= ticket_used
     current = received - spent
 
     # 2) Lo que falta hasta tu próximo cobro (desde mañana: lo de hoy ya está en el punto 1)
@@ -266,6 +284,7 @@ def money_now(
         bills_cents=bills, usual_spending_cents=usual,
         has_spending_history=usual_daily > 0, usual_daily_cents=round(usual_daily), free_cents=free,
         can_save_cents=can_save, can_save_high_cents=can_save_high,
+        ticket_cents=ticket, ticket_used_cents=ticket_used, ticket_left_cents=max(ticket - ticket_used, 0),
         save_pct=save_pct, daily_spending_cents=daily, short_cents=short,
     )
 
