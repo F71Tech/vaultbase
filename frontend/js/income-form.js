@@ -1,7 +1,7 @@
 // income-form.js · Hoja para cargar o editar un ingreso.
 
 import { api } from "./api.js";
-import { centsToInput, parseMoney, shortDate, toISO, todayISO } from "./format.js";
+import { centsToInput, parseMoney, parseMoneyOrZero, shortDate, toISO, todayISO } from "./format.js";
 import { FREQUENCY } from "./labels.js";
 import { confirmDialog, createSheet, notifyDataChanged, toast } from "./ui.js";
 
@@ -158,7 +158,7 @@ function ensureSheet() {
       }
       if (extras && $("#if-has-commissions").checked) {
         const floorText = $("#if-floor").value.trim();
-        body.commission_floor_cents = floorText ? parseMoney(floorText) : 0;
+        body.commission_floor_cents = parseMoneyOrZero(floorText);
         if (body.commission_floor_cents === null) return ($("#if-error").textContent = "Revisá el bono mínimo.");
       }
     }

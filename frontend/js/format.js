@@ -31,6 +31,11 @@ export function parseMoney(text) {
   return Number.isFinite(value) && value > 0 ? Math.round(value * 100) : null;
 }
 
+/** Como parseMoney, pero para campos opcionales: vacío o "0" valen 0 (no es un error). */
+export function parseMoneyOrZero(text) {
+  return /^[\s$0.,]*$/.test(String(text)) ? 0 : parseMoney(text);
+}
+
 /** centésimos -> texto para un input ("150050" -> "1500,50") */
 export const centsToInput = (cents) =>
   (cents / 100).toLocaleString("es-UY", { maximumFractionDigits: 2, useGrouping: false });

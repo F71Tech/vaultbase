@@ -1,7 +1,7 @@
 // metas.js · Metas de ahorro: progreso, fecha estimada, sumar ahorro y celebrar.
 
 import { api } from "../api.js";
-import { centsToInput, money, parseMoney, shortDate } from "../format.js";
+import { centsToInput, money, parseMoney, parseMoneyOrZero, shortDate } from "../format.js";
 import { mountShell } from "../shell.js";
 import {
   celebrate, confirmDialog, countUp, createSheet, css, esc, fillBars, icons, notifyDataChanged, onDataChanged, toast,
@@ -121,15 +121,17 @@ function openGoalSheet(goal = null) {
     goalSheet.ready = true;
     q("#goal-form").addEventListener("submit", async (e) => {
       e.preventDefault();
+      q("#gf-error").textContent = "";
       const target = parseMoney(q("#gf-target").value);
       const savedText = q("#gf-saved").value.trim();
-      const saved = savedText ? parseMoney(savedText) : 0;
-      const contribText = q("#gf-contribution").value.trim();
-      const contribution = contribText ? parseMoney(contribText) : null;
+      const saved = parseMoneyOrZero(savedText);
+      const contrib = parseMoneyOrZero(q("#gf-contribution").value);  // vacío o 0 = automático
+      const contribution = contrib === 0 ? null : contrib;
       const name = q("#gf-name").value.trim();
       if (!name) return (q("#gf-error").textContent = "Ponele un nombre.");
       if (!target) return (q("#gf-error").textContent = "Escribí el monto objetivo.");
-      if (saved === null || (contribText && contribution === null)) return (q("#gf-error").textContent = "Revisá los montos.");
+      if (saved === null) return (q("#gf-error").textContent = "Revisá el monto de \"Ya ahorrado\".");
+      if (contrib === null) return (q("#gf-error").textContent = "Revisá el aporte fijo por mes.");
       const body = { name, target_cents: target, saved_cents: saved, deadline: q("#gf-deadline").value || null,
                      monthly_contribution_cents: contribution };
       try {
