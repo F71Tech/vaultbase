@@ -5,6 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Ingresar · VaultBase</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <!-- App instalable (PWA): nombre, ícono y colores cuando se agrega a la pantalla de inicio -->
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+  <meta name="theme-color" content="#08152A" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+  <meta name="apple-mobile-web-app-title" content="VaultBase" />
   <script src="/js/theme-init.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
@@ -63,6 +71,12 @@
           <p class="form-error" id="error" role="alert"></p>
           <button class="btn btn-primary w-full" id="submit">Ingresar</button>
         </form>
+        <!-- Olvidé mi contraseña: todavía no mandamos mails, así que el administrador genera un link -->
+        <details class="mt-4 text-sm" id="forgot">
+          <summary class="text-primary cursor-pointer font-medium">¿Olvidaste tu contraseña?</summary>
+          <p class="muted mt-2">Por seguridad, nadie puede ver tu contraseña (ni siquiera nosotros: se guarda cifrada).
+            Escribile a quien te invitó a VaultBase y te va a mandar un <b>link para crear una nueva</b>. El link vence en 24 horas.</p>
+        </details>
         <div class="flex items-center gap-3 my-6 muted text-xs"><span class="flex-1 border-t" style="border-color:var(--border)"></span>o<span class="flex-1 border-t" style="border-color:var(--border)"></span></div>
         <button class="btn btn-ghost w-full" id="demo-btn"><i data-lucide="play" class="w-4 h-4"></i>Probar la demo sin registrarme</button>
       </div>

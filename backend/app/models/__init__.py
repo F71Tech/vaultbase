@@ -17,5 +17,6 @@ from .subscription import (
     Subscription, SubscriptionCreate, SubscriptionFrequency, SubscriptionRead,
     SubscriptionUpdate,
 )
-from .user import Token, User, UserCreate, UserRead, UserUpdate
+from .support import Feedback, FeedbackCreate, PasswordReset
+from .user import PasswordChange, PasswordResetIn, Token, User, UserCreate, UserRead, UserUpdate
 from .wish import Priority, WishItem, WishItemCreate, WishItemRead, WishItemUpdate

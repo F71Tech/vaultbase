@@ -22,6 +22,10 @@ class Settings(BaseSettings):
     secret_key: str = DEV_SECRET
     database_url: str = "sqlite:///./vaultbase.db"
     access_token_expire_minutes: int = 60 * 24  # 1 día
+    # Emails de los administradores, separados por coma (ej: "yo@mail.com").
+    # Pueden ver estadísticas de uso, generar links para restablecer contraseñas
+    # y ver los datos de quien haya aceptado compartirlos.
+    admin_emails: str = ""
 
     # Le indicamos a pydantic-settings que lea el archivo .env
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
@@ -39,6 +43,10 @@ class Settings(BaseSettings):
         if self.app_env == "production" and (self.secret_key == DEV_SECRET or len(self.secret_key) < 32):
             raise ValueError("En producción, SECRET_KEY debe ser una clave propia de al menos 32 caracteres")
         return self
+
+    def is_admin(self, email: str) -> bool:
+        admins = {e.strip().lower() for e in self.admin_emails.split(",") if e.strip()}
+        return email.lower() in admins
 
     @property
     def is_sqlite(self) -> bool:

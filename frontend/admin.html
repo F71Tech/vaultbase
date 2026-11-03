@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="es" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Administrador · VaultBase</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <!-- App instalable (PWA): nombre, ícono y colores cuando se agrega a la pantalla de inicio -->
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+  <meta name="theme-color" content="#08152A" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+  <meta name="apple-mobile-web-app-title" content="VaultBase" />
+  <script src="/js/theme-init.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.1.11"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  <link rel="stylesheet" href="/css/app.css" />
+</head>
+<body class="min-h-screen">
+  <div class="app-layout mx-auto max-w-6xl px-4 md:flex md:gap-8 pb-28 md:pb-12">
+  <aside id="sidebar" class="hidden"></aside>
+  <main class="flex-1 min-w-0 pt-6 md:pt-8 space-y-5 md:space-y-6">
+    <header class="rise">
+      <h1 class="font-display text-3xl font-bold tracking-tight">Administrador</h1>
+      <p class="muted">Cómo usan la app las personas que la prueban. Sin montos: los datos de alguien se ven solo si lo permitió.</p>
+    </header>
+
+    <section class="card p-4 md:p-5 rise" style="animation-delay:.05s">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="font-display font-semibold text-lg">Usuarios</h2>
+        <span class="chip" id="user-count">…</span>
+      </div>
+      <div id="users" class="space-y-2"></div>
+    </section>
+
+    <section class="card p-4 md:p-5 rise" style="animation-delay:.1s">
+      <h2 class="font-display font-semibold text-lg mb-3">Comentarios</h2>
+      <div id="feedback" class="space-y-2"></div>
+    </section>
+
+    <section class="card p-4 md:p-5 rise" id="user-data-card" hidden>
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="font-display font-semibold text-lg" id="user-data-title">Datos</h2>
+        <button class="btn btn-ghost text-sm" id="user-data-close">Cerrar</button>
+      </div>
+      <div id="user-data"></div>
+    </section>
+  </main>
+  </div>
+  <script type="module" src="/js/pages/admin.js"></script>
+</body>
+</html>

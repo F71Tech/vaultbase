@@ -1,0 +1,21 @@
+{
+  "name": "VaultBase · Tus finanzas",
+  "short_name": "VaultBase",
+  "description": "Gastos, sueldo, metas y cuánto podés gastar por día. Hecho para Uruguay.",
+  "lang": "es-UY",
+  "start_url": "/dashboard.html",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#08152A",
+  "theme_color": "#08152A",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Anotar un gasto", "url": "/dashboard.html?nuevo=gasto", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Mis metas", "url": "/metas.html", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] }
+  ]
+}

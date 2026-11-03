@@ -1,28 +1,54 @@
 """Datos y preferencias del usuario logueado."""
 
-from fastapi import APIRouter, Response, status
+from fastapi import APIRouter, HTTPException, Response, status
 
+from ..config import get_settings
 from ..deps import CurrentUser, SessionDep
-from ..models import UserRead, UserUpdate
+from ..models import Feedback, FeedbackCreate, PasswordChange, User, UserRead, UserUpdate
+from ..security import hash_password, verify_password
 from ..services.accounts import delete_user_data
 
 router = APIRouter(prefix="/api/users", tags=["Usuario"])
 
 
+def as_read(user: User) -> UserRead:
+    """El usuario para mostrar, con "¿es administrador?" (sale de la configuración)."""
+    return UserRead.model_validate(user, update={"is_admin": get_settings().is_admin(user.email)})
+
+
 @router.get("/me", response_model=UserRead)
 def read_me(user: CurrentUser):
     """Devuelve el usuario dueño del token."""
-    return user
+    return as_read(user)
 
 
 @router.patch("/me", response_model=UserRead)
 def update_me(data: UserUpdate, user: CurrentUser, session: SessionDep):
-    """Edita nombre o % de presupuesto de comida. Solo cambia lo que se envía."""
+    """Edita nombre, % de comida o si compartís tus datos. Solo cambia lo que se envía."""
     user.sqlmodel_update(data.model_dump(exclude_unset=True))
     session.add(user)
     session.commit()
     session.refresh(user)
-    return user
+    return as_read(user)
+
+
+@router.post("/me/password", status_code=status.HTTP_204_NO_CONTENT)
+def change_password(data: PasswordChange, user: CurrentUser, session: SessionDep):
+    """Cambia tu contraseña (hay que saber la actual)."""
+    if not verify_password(data.current_password, user.hashed_password):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "La contraseña actual no es correcta")
+    user.hashed_password = hash_password(data.new_password)
+    session.add(user)
+    session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/me/feedback", status_code=status.HTTP_201_CREATED)
+def send_feedback(data: FeedbackCreate, user: CurrentUser, session: SessionDep):
+    """Un comentario para el administrador: algo que no se entendió, una idea, un error."""
+    session.add(Feedback.model_validate(data, update={"user_id": user.id}))
+    session.commit()
+    return {"ok": True}
 
 
 @router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)

@@ -5,6 +5,7 @@ Este archivo crea la aplicación FastAPI. Uvicorn (el servidor) la busca acá:
     .venv\\Scripts\\python -m uvicorn backend.app.main:app --reload
 """
 
+import mimetypes
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -15,9 +16,13 @@ from sqlmodel import select
 from .config import get_settings
 from .database import run_migrations
 from .deps import SessionDep
-from .routers import auth, categories, finance, resources, salary, users
+from .routers import admin, auth, categories, finance, resources, salary, users
 
 settings = get_settings()
+
+# El "manifest" de la app instalable (PWA): Python no conoce esta extensión en
+# todos los sistemas, y el celular lo quiere con su tipo correcto.
+mimetypes.add_type("application/manifest+json", ".webmanifest")
 
 # Ruta a la carpeta "frontend" (dos niveles arriba de este archivo).
 # Usamos Path para que funcione igual en Windows y en Linux (el servidor).
@@ -88,6 +93,7 @@ app.include_router(resources.goals_router)
 app.include_router(resources.wishlist_router)
 app.include_router(finance.router)
 app.include_router(salary.router)
+app.include_router(admin.router)
 
 
 # --- Frontend ----------------------------------------------------------------

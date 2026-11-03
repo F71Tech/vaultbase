@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="es" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Nueva contraseña · VaultBase</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <!-- App instalable (PWA): nombre, ícono y colores cuando se agrega a la pantalla de inicio -->
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+  <meta name="theme-color" content="#08152A" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+  <meta name="apple-mobile-web-app-title" content="VaultBase" />
+  <script src="/js/theme-init.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.1.11"></script>
+  <script src="https://cdn.jsdelivr.net/npm/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  <link rel="stylesheet" href="/css/app.css" />
+</head>
+<body class="min-h-screen grid place-items-center px-4 py-10">
+  <main class="w-full max-w-md rise">
+    <a href="/" class="block font-display text-3xl font-bold mb-8 text-center">Vault<span class="text-primary">Base</span></a>
+    <h1 class="font-display text-3xl font-bold mb-1">Nueva contraseña</h1>
+    <p class="muted mb-6" id="subtitle">Elegí una contraseña nueva para tu cuenta.</p>
+    <form id="reset-form" class="space-y-4" novalidate>
+      <label class="field"><span>Contraseña nueva</span>
+        <input class="input" id="pass" type="password" autocomplete="new-password" minlength="8" placeholder="Mínimo 8 caracteres" required /></label>
+      <label class="field"><span>Repetila</span>
+        <input class="input" id="pass2" type="password" autocomplete="new-password" minlength="8" required /></label>
+      <p class="form-error" id="error" role="alert"></p>
+      <button class="btn btn-primary w-full" id="submit">Guardar contraseña</button>
+    </form>
+    <div id="done" class="card p-6 text-center" hidden>
+      <i data-lucide="circle-check" class="w-10 h-10 mx-auto mb-3 text-success"></i>
+      <h2 class="font-display text-xl font-bold mb-1">¡Listo!</h2>
+      <p class="muted mb-5">Ya podés ingresar con tu contraseña nueva.</p>
+      <a href="/login.html" class="btn btn-primary w-full">Ingresar</a>
+    </div>
+  </main>
+  <script type="module" src="/js/pages/restablecer.js"></script>
+</body>
+</html>

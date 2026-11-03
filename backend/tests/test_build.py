@@ -12,8 +12,23 @@ spec.loader.exec_module(build)
 def test_todas_las_paginas_tienen_el_cdn_esperado():
     # Si alguien cambia la versión del CDN en un HTML y no en el script,
     # esa página quedaría sin el CSS compilado en producción.
+    # (offline.html no usa Tailwind: se ve sin internet, con sus propios estilos)
     for page in (ROOT / "frontend").glob("*.html"):
+        if page.name == "offline.html":
+            continue
         assert build.CDN_TAG in page.read_text(encoding="utf-8"), page.name
+
+
+def test_app_instalable():
+    # Cada página tiene lo necesario para "Agregar a inicio" (PWA)
+    for page in (ROOT / "frontend").glob("*.html"):
+        if page.name == "offline.html":
+            continue
+        html = page.read_text(encoding="utf-8")
+        assert 'rel="manifest"' in html and "apple-touch-icon" in html, page.name
+    for icon in ("icon-192.png", "icon-512.png", "apple-touch-icon.png"):
+        assert (ROOT / "frontend" / "icons" / icon).exists()
+    assert (ROOT / "frontend" / "sw.js").exists()
 
 
 def test_reemplaza_cdn_por_css_compilado(tmp_path, monkeypatch):

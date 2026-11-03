@@ -30,6 +30,9 @@ class User(UserBase, table=True):
     hashed_password: str
     # % del ingreso disponible destinado a comida (configurable por usuario)
     food_budget_pct: int = Field(default=30, ge=0, le=100)
+    # El usuario aceptó que el administrador vea sus datos (para ayudarlo).
+    # Sin esto, el administrador solo ve estadísticas de uso, nunca montos.
+    shares_data: bool = False
     created_at: dt.datetime = Field(default_factory=utcnow)
 
 
@@ -46,12 +49,25 @@ class UserCreate(UserBase):
 class UserRead(UserBase):
     id: int
     food_budget_pct: int
+    shares_data: bool
+    is_admin: bool = False    # no se guarda: sale de la configuración (ADMIN_EMAILS)
     created_at: dt.datetime
 
 
 class UserUpdate(UpdateSchema):
     name: str | None = Field(default=None, min_length=1, max_length=80)
     food_budget_pct: int | None = Field(default=None, ge=0, le=100)
+    shares_data: bool | None = None
+
+
+class PasswordChange(SQLModel):
+    current_password: str = Field(min_length=1, max_length=128)
+    new_password: str = Field(min_length=8, max_length=128)
+
+
+class PasswordResetIn(SQLModel):
+    token: str = Field(min_length=10, max_length=200)
+    new_password: str = Field(min_length=8, max_length=128)
 
 
 class Token(SQLModel):

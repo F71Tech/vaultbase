@@ -4,6 +4,7 @@ import { api } from "../api.js";
 import { openExpenseSheet } from "../expense-form.js";
 import { longToday, money, moneyExact, shortDate, shortRange, todayISO } from "../format.js";
 import { openIncomeSheet } from "../income-form.js";
+import { isInstalled, openInstall } from "../install.js";
 import { openPaySheet } from "../pay-form.js";
 import { categoryLabel, CATEGORY_COLOR, EXTRA_CATEGORY_LABELS, getCategories } from "../labels.js";
 import { mountShell } from "../shell.js";
@@ -332,6 +333,51 @@ function openFoodSheet() {
   foodSheet.open();
 }
 
+// --- Primeros pasos: una guía corta para quien recién empieza ---
+// Cada paso se tacha solo cuando la app detecta que ya lo hiciste.
+const GUIDE_KEY = "vb-guide-hidden";
+
+function renderGuide() {
+  let hidden = false;
+  try { hidden = localStorage.getItem(GUIDE_KEY) === "1"; } catch { /* sin almacenamiento */ }
+  const m = overview.current_month;
+  const steps = [
+    { done: payInfo.incomes.some((i) => i.frequency === "monthly" && !i.food_only), action: "income",
+      title: "Cargá tu sueldo", hint: "Cuánto cobrás y qué día. Es la base de todos los cálculos." },
+    { done: m.fixed_expenses_cents > 0, action: "fixed",
+      title: "Anotá tus gastos fijos", hint: "Alquiler, UTE, internet… lo que pagás todos los meses." },
+    { done: overview.money.has_spending_history || m.variable_expenses_cents > 0, action: "expense",
+      title: "Anotá un gasto del día", hint: "Con el botón +, en dos toques. Ej: el súper o un café." },
+    { done: overview.goals.length > 0, action: "goal",
+      title: "Creá una meta", hint: "Un viaje, un fondo de emergencia… y mirá su plan." },
+    { done: isInstalled(), action: "install",
+      title: "Instalá la app en tu celular", hint: "Queda con su ícono, como cualquier app." },
+  ];
+  const doneCount = steps.filter((s) => s.done).length;
+  const box = $("getting-started");
+  box.hidden = hidden || doneCount === steps.length;
+  if (box.hidden) return;
+  box.innerHTML = `
+    <div class="flex items-center justify-between gap-3 mb-3">
+      <div>
+        <h2 class="font-display font-semibold text-lg">Primeros pasos</h2>
+        <p class="muted text-xs">${doneCount} de ${steps.length} listos · en 5 minutos la app ya te dice cuánto podés gastar por día</p>
+      </div>
+      <button class="text-xs muted underline" data-guide-hide>Ocultar</button>
+    </div>
+    <div class="bar mb-4" style="height:6px"><span data-fill="${(doneCount / steps.length) * 100}" style="background:var(--success)"></span></div>
+    <ol class="grid gap-2 md:grid-cols-2">${steps.map((s, i) => `
+      <li>
+        <button class="w-full text-left rounded-xl p-3 flex gap-3 items-start ${s.done ? "opacity-60" : ""}" style="background:var(--surface-2)"
+                data-guide="${s.action}" ${s.done ? "disabled" : ""}>
+          <span class="grid place-items-center w-6 h-6 rounded-full shrink-0 text-xs font-bold ${s.done ? "bg-primary-soft text-success" : "bg-primary-soft text-primary"}">
+            ${s.done ? `<i data-lucide="check" class="w-3.5 h-3.5"></i>` : i + 1}</span>
+          <span><span class="block text-sm font-medium ${s.done ? "line-through" : ""}">${s.title}</span>
+            <span class="block muted text-xs">${s.hint}</span></span>
+        </button>
+      </li>`).join("")}</ol>`;
+}
+
 // --- Recordatorio del día de cobro: "¿cuánto te entró?" ---
 // Durante la semana después de cada cobro del sueldo, si todavía no anotaste
 // el cobro real de ese mes, lo pedimos (así los cálculos usan el número real).
@@ -361,6 +407,7 @@ async function load() {
   // El sueldo principal: el ingreso mensual más grande (que no sea el ticket)
   const monthly = incomes.filter((i) => i.frequency === "monthly" && !i.food_only);
   payInfo = { salary: monthly.sort((a, b) => b.amount_cents - a.amount_cents)[0] ?? null, records, incomes };
+  renderGuide();
   renderMoney();
   renderStats();
   renderCharts();
@@ -393,9 +440,28 @@ async function init() {
     freq.dispatchEvent(new Event("change"));
     document.getElementById("if-pay-day").value = Number(oneTimeSalary.start_date.slice(8, 10));
   });
+  // Botones de "Primeros pasos"
+  $("getting-started").addEventListener("click", (e) => {
+    if (e.target.closest("[data-guide-hide]")) {
+      try { localStorage.setItem(GUIDE_KEY, "1"); } catch { /* sin almacenamiento */ }
+      $("getting-started").hidden = true;
+      return;
+    }
+    const action = e.target.closest("[data-guide]")?.dataset.guide;
+    if (action === "income") openIncomeSheet(null, { source: "Sueldo", frequency: "monthly" });
+    if (action === "fixed") openExpenseSheet(null, { kind: "fixed" });
+    if (action === "expense") openExpenseSheet();
+    if (action === "goal") location.href = "/metas.html";
+    if (action === "install") openInstall();
+  });
   onDataChanged(load);
   document.addEventListener("vb:theme", renderCharts);  // los colores del gráfico cambian con el tema
   loadRate();
+  // Atajo del ícono instalado ("Anotar un gasto"): abre el "+" directamente
+  if (new URLSearchParams(location.search).get("nuevo") === "gasto") {
+    history.replaceState(null, "", "/dashboard.html");
+    openExpenseSheet();
+  }
   load();
 }
 

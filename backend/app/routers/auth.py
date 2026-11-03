@@ -1,13 +1,16 @@
 """Registro e inicio de sesión."""
 
+import datetime as dt
+import hashlib
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlmodel import select
 
 from ..deps import SessionDep
-from ..models import Token, User, UserCreate, UserRead
+from ..models import PasswordReset, PasswordResetIn, Token, User, UserCreate, UserRead
+from ..models.common import utcnow
 from ..security import DUMMY_HASH, create_access_token, hash_password, verify_password
 from ..services.demo import create_demo_user
 
@@ -54,6 +57,26 @@ def login(form: Annotated[OAuth2PasswordRequestForm, Depends()], session: Sessio
             headers={"WWW-Authenticate": "Bearer"},
         )
     return Token(access_token=create_access_token(user.id))
+
+
+def hash_token(token: str) -> str:
+    """Del link de restablecimiento guardamos solo su hash (como con las contraseñas)."""
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+@router.post("/reset", status_code=status.HTTP_204_NO_CONTENT)
+def reset_password(data: PasswordResetIn, session: SessionDep):
+    """Elegir una contraseña nueva con el link de un solo uso que generó el administrador."""
+    reset = session.exec(select(PasswordReset).where(PasswordReset.token_hash == hash_token(data.token))).first()
+    expires = reset and (reset.expires_at if reset.expires_at.tzinfo else reset.expires_at.replace(tzinfo=dt.timezone.utc))
+    if reset is None or reset.used_at is not None or expires < utcnow():
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "El link venció o ya se usó. Pedí uno nuevo.")
+    user = session.get(User, reset.user_id)
+    user.hashed_password = hash_password(data.new_password)
+    reset.used_at = utcnow()
+    session.add_all([user, reset])
+    session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/demo", response_model=Token)

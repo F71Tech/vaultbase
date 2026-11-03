@@ -2,11 +2,13 @@
 
 from sqlmodel import Session, delete
 
-from ..models import Commission, Expense, Goal, Income, PayRecord, Subscription, User, WishItem
+from ..models import (
+    Commission, Expense, Feedback, Goal, Income, PasswordReset, PayRecord, Subscription, User, WishItem,
+)
 
 # Tablas que pertenecen a un usuario (columna user_id).
 # PayRecord va ANTES que Income: apunta a un ingreso (foreign key) y si no, la base no deja borrarlo.
-USER_TABLES = (PayRecord, Income, Expense, Subscription, Goal, WishItem, Commission)
+USER_TABLES = (PayRecord, Income, Expense, Subscription, Goal, WishItem, Commission, PasswordReset, Feedback)
 
 
 def delete_user_data(session: Session, user_id: int) -> None:
