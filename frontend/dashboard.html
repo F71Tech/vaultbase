@@ -37,6 +37,9 @@
       </div>
     </section>
 
+    <!-- Aviso: el sueldo está cargado como "única vez" (entonces los meses que vienen no tienen sueldo) -->
+    <section id="salary-hint" class="card p-4 md:p-5 rise" hidden></section>
+
     <!-- Tu plata hoy: saldo actual, cuánto gastar por día y cuánto ahorrar (lo dibuja dashboard.js) -->
     <section id="money" class="card p-5 md:p-6 rise" style="animation-delay:.03s" aria-live="polite"></section>
 
@@ -56,11 +59,13 @@
         <div class="flex items-center justify-between mb-3"><span class="muted text-sm">Balance del mes</span>
           <span class="icon-badge bg-primary-soft text-primary"><i data-lucide="scale"></i></span></div>
         <div class="font-display text-xl md:text-2xl font-bold" id="stat-balance">$ 0</div>
+        <div class="muted text-xs mt-1">Lo que entra − lo que sale este mes (no es tu plata total)</div>
       </div>
       <div class="card p-4 md:p-5 rise" style="animation-delay:.2s">
-        <div class="flex items-center justify-between mb-3"><span class="muted text-sm">Ahorro posible / mes</span>
+        <div class="flex items-center justify-between mb-3"><span class="muted text-sm">Podés ahorrar</span>
           <span class="icon-badge bg-accent-soft text-accent"><i data-lucide="piggy-bank"></i></span></div>
         <div class="font-display text-xl md:text-2xl font-bold text-accent" id="stat-savings">$ 0</div>
+        <div class="muted text-xs mt-1" id="stat-savings-note"></div>
       </div>
     </section>
 

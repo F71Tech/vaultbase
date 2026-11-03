@@ -123,9 +123,34 @@ function renderStats() {
   countUp($("stat-income"), m.income_cents);
   countUp($("stat-expenses"), m.total_expenses_cents);
   countUp($("stat-balance"), m.balance_cents);
-  countUp($("stat-savings"), overview.capacity.monthly_savings_cents);
+  // "Podés ahorrar": cuenta tu plata de HOY (lo mismo que la tarjeta de arriba),
+  // y abajo, como referencia, lo que te sobra en un mes típico.
+  const money_ = overview.money;
+  countUp($("stat-savings"), money_.can_save_cents);
+  const typical = overview.capacity.monthly_savings_cents;
+  $("stat-savings-note").textContent = `hasta tu próximo cobro (${shortDate(money_.next_pay)})`
+    + (typical > 0 ? ` · en un mes típico te sobran ${money(typical)}` : "");
   $("stat-balance").className = `font-display text-xl md:text-2xl font-bold ${m.balance_cents < 0 ? "text-danger" : "text-primary"}`;
-  $("onboarding").hidden = overview.capacity.recurring_income_cents > 0 || m.income_cents > 0;
+  // Sin ingresos que se repitan, pero con un cobro único reciente (que no sea
+  // "plata que ya tenía"): seguramente es el sueldo cargado como "única vez".
+  const noRecurring = overview.capacity.recurring_income_cents <= 0;
+  const monthAgo = new Date(Date.now() - 45 * 86400000).toISOString().slice(0, 10);
+  oneTimeSalary = noRecurring ? payInfo.incomes.find((i) => i.frequency === "one_time" && !i.food_only
+    && i.start_date >= monthAgo && !/ya ten[ií]a/i.test(i.source)) : null;
+  $("salary-hint").hidden = !oneTimeSalary;
+  if (oneTimeSalary) {
+    $("salary-hint").innerHTML = `
+      <div class="flex flex-col md:flex-row md:items-center gap-3">
+        <span class="icon-badge bg-danger-soft text-danger" style="width:44px;height:44px"><i data-lucide="calendar-x"></i></span>
+        <div class="flex-1 text-sm">
+          <b>"${esc(oneTimeSalary.source)}" está cargado como "única vez"</b> (${shortDate(oneTimeSalary.start_date)}).
+          <span class="muted">Para la app no volvés a cobrar: por eso los ingresos del mes dan $ 0 y el ahorro posible, negativo.
+          Si lo cobrás todos los meses, pasalo a <b>Mensual</b> (y anotá el cobro real de cada mes).</span>
+        </div>
+        <button class="btn btn-primary text-sm" data-fix-salary>Pasarlo a mensual</button>
+      </div>`;
+  }
+  $("onboarding").hidden = Boolean(oneTimeSalary) || overview.capacity.recurring_income_cents > 0 || m.income_cents > 0;
 }
 
 // --- Gráficos (Chart.js) ---
@@ -310,7 +335,8 @@ function openFoodSheet() {
 // --- Recordatorio del día de cobro: "¿cuánto te entró?" ---
 // Durante la semana después de cada cobro del sueldo, si todavía no anotaste
 // el cobro real de ese mes, lo pedimos (así los cálculos usan el número real).
-let payInfo = { salary: null, records: [] };
+let payInfo = { salary: null, records: [], incomes: [] };
+let oneTimeSalary = null;  // el sueldo cargado por error como "única vez" (si lo hay)
 
 function payReminder() {
   const { salary, records } = payInfo;
@@ -334,7 +360,7 @@ async function load() {
   overview = ov;
   // El sueldo principal: el ingreso mensual más grande (que no sea el ticket)
   const monthly = incomes.filter((i) => i.frequency === "monthly" && !i.food_only);
-  payInfo = { salary: monthly.sort((a, b) => b.amount_cents - a.amount_cents)[0] ?? null, records };
+  payInfo = { salary: monthly.sort((a, b) => b.amount_cents - a.amount_cents)[0] ?? null, records, incomes };
   renderMoney();
   renderStats();
   renderCharts();
@@ -356,6 +382,16 @@ async function init() {
     if (e.target.closest("[data-previous-money]")) {
       openIncomeSheet(null, { source: "Plata que ya tenía", frequency: "one_time", start_date: overview.money.tracked_from });
     }
+  });
+  // "Pasarlo a mensual": abre el ingreso ya cambiado a Mensual, con el día de cobro
+  // de ese cobro único (ej: 30). La fecha "desde" queda en ese cobro.
+  $("salary-hint").addEventListener("click", (e) => {
+    if (!e.target.closest("[data-fix-salary]") || !oneTimeSalary) return;
+    openIncomeSheet(oneTimeSalary);
+    const freq = document.getElementById("if-frequency");
+    freq.value = "monthly";
+    freq.dispatchEvent(new Event("change"));
+    document.getElementById("if-pay-day").value = Number(oneTimeSalary.start_date.slice(8, 10));
   });
   onDataChanged(load);
   document.addEventListener("vb:theme", renderCharts);  // los colores del gráfico cambian con el tema
