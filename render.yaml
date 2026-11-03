@@ -19,3 +19,5 @@ services:
         generateValue: true  # Render inventa una clave larga y secreta
       - key: DATABASE_URL
         sync: false  # la pegás vos en el panel de Render (la URL de Neon)
+      - key: ADMIN_EMAILS
+        sync: false  # tu email (o varios, separados por coma): quién ve el panel de administrador
