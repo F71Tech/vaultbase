@@ -186,7 +186,22 @@ select.input { appearance: none; background-image: none; }
 /* ===== Tutorial (tour.js) =====
    El "foco" es un recuadro transparente con una sombra enorme alrededor:
    la sombra oscurece toda la pantalla menos el recuadro. */
-.tour { position: fixed; inset: 0; z-index: 90; }
+.tour { position: fixed; inset: 0; z-index: 90; touch-action: none; overscroll-behavior: none; }
+/* "Deslizá para actualizar" (app instalada): la bolita que baja con el dedo */
+.ptr {
+  position: fixed; top: env(safe-area-inset-top); left: 50%; z-index: 70; transform: translate(-50%, -56px);
+  display: grid; place-items: center; width: 40px; height: 40px; border-radius: 999px;
+  background: var(--surface); color: var(--muted); box-shadow: var(--shadow); pointer-events: none;
+  transition: transform .25s var(--ease), color .2s;
+}
+.ptr.ready { color: var(--primary); }
+.ptr.spinning svg { animation: ptr-spin .7s linear infinite; }
+@keyframes ptr-spin { to { transform: rotate(360deg); } }
+/* Que el rebote de iOS no "arrastre" la pantalla entera al tirar */
+@media (display-mode: standalone) { html, body { overscroll-behavior-y: none; } }
+
+/* Con el tutorial abierto la página no se mueve (si no, el foco "persigue" al scroll y se ve trabado) */
+html.tour-open, html.tour-open body { overflow: hidden; overscroll-behavior: none; }
 .tour.dim { background: rgba(2, 8, 20, .72); }
 .tour-spot {
   position: fixed; border-radius: 16px; pointer-events: none;

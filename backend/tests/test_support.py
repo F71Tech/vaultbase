@@ -32,6 +32,13 @@ def test_cambiar_contrasena(client, auth):
     assert login(client, "ana@example.com", PASSWORD).status_code == 401
 
 
+def test_tutorial_solo_la_primera_vez(client, auth):
+    # Cuenta nueva: el tutorial está pendiente; al marcarlo, queda guardado en la cuenta
+    assert client.get("/api/users/me", headers=auth).json()["tour_done"] is False
+    client.patch("/api/users/me", json={"tour_done": True}, headers=auth)
+    assert client.get("/api/users/me", headers=auth).json()["tour_done"] is True
+
+
 def test_link_para_restablecer(client, make_user, admin):
     ana = make_user("ana@example.com")
     ana_id = client.get("/api/users/me", headers=ana).json()["id"]

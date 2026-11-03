@@ -7,6 +7,7 @@
 import { api, auth, isDemoEmail, requireLogin } from "./api.js";
 import { openExpenseSheet } from "./expense-form.js";
 import { isInstalled, maybeSuggestInstall, openInstall } from "./install.js";
+import { setupRefresh } from "./refresh.js";
 import { startTour } from "./tour.js";
 import { confirmDialog, createSheet, esc, icons, toast, toggleTheme } from "./ui.js";
 
@@ -248,6 +249,7 @@ export function mountShell() {
   }).catch(() => {});
 
   maybeSuggestInstall();
+  setupRefresh();
   icons();
   return true;
 }

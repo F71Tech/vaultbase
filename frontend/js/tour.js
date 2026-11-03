@@ -7,9 +7,12 @@
 // Sale solo la primera vez; después se puede ver desde el menú.
 // =========================================================================
 
+import { api } from "./api.js";
+import { getMe } from "./shell.js";
 import { icons } from "./ui.js";
 
 const DONE_KEY = "vb-tour-done";
+const stopScroll = (e) => e.preventDefault();  // bloquea deslizar el dedo / la rueda sobre el tutorial
 
 /** El primer elemento VISIBLE de una lista de selectores (menú lateral en compu, barra abajo en celular). */
 function visible(selectors) {
@@ -57,7 +60,12 @@ function place() {
   const pad = 8;
   state.root.classList.toggle("dim", !el);  // sin elemento que iluminar: todo oscuro
   if (el) {
-    const r = el.getBoundingClientRect();
+    const box = el.getBoundingClientRect();
+    // Si es más alto que media pantalla (ej. "Tu plata hoy" en el celular), iluminamos solo
+    // la parte de arriba: así queda lugar para la tarjeta y no se tapa todo
+    const maxH = innerHeight * 0.45;
+    const r = { left: box.left, width: box.width, top: box.top, height: Math.min(box.height, maxH) };
+    r.bottom = r.top + r.height;
     Object.assign(spot.style, {
       display: "block", left: `${r.left - pad}px`, top: `${r.top - pad}px`,
       width: `${r.width + pad * 2}px`, height: `${r.height + pad * 2}px`,
@@ -99,7 +107,9 @@ function render() {
     </div>`;
   root.setAttribute("aria-label", step.title);
   const el = step.target ? visible(step.target) : null;
-  el?.scrollIntoView({ block: "center", behavior: "instant" });
+  // Lo alto se muestra desde su comienzo; lo chico, centrado
+  const tall = el && el.getBoundingClientRect().height > innerHeight * 0.45;
+  el?.scrollIntoView({ block: tall ? "start" : "center", behavior: "instant" });
   requestAnimationFrame(place);
   icons();
 }
@@ -114,11 +124,17 @@ function go(delta) {
 
 export function endTour() {
   if (!state) return;
-  try { localStorage.setItem(DONE_KEY, "1"); } catch { /* sin almacenamiento */ }
   state.root.remove();
+  document.documentElement.classList.remove("tour-open");
   removeEventListener("resize", place);
-  removeEventListener("scroll", place, true);
   state = null;
+}
+
+/** Lo marcamos como visto apenas arranca (en este aparato y en la cuenta):
+ *  si cerrás la app a la mitad, no vuelve a salir solo. */
+function markSeen() {
+  try { localStorage.setItem(DONE_KEY, "1"); } catch { /* sin almacenamiento */ }
+  api("/api/users/me", { method: "PATCH", body: { tour_done: true } }).catch(() => {});
 }
 
 /** Arranca el recorrido (desde el menú, o la primera vez). */
@@ -130,6 +146,10 @@ export function startTour() {
   root.setAttribute("aria-modal", "true");
   root.innerHTML = `<div class="tour-spot"></div><div class="tour-card card p-4"></div>`;
   document.body.append(root);
+  document.documentElement.classList.add("tour-open");
+  root.addEventListener("touchmove", stopScroll, { passive: false });
+  root.addEventListener("wheel", stopScroll, { passive: false });
+  markSeen();
   state = { i: 0, root, spot: root.querySelector(".tour-spot"), card: root.querySelector(".tour-card") };
   root.addEventListener("click", (e) => {
     const action = e.target.closest("[data-tour]")?.dataset.tour;
@@ -138,13 +158,18 @@ export function startTour() {
     if (action === "skip" || action === "end") endTour();
   });
   addEventListener("resize", place);
-  addEventListener("scroll", place, true);
   render();
 }
 
-/** La primera vez que alguien entra, el recorrido sale solo. */
-export function maybeStartTour() {
+/** Sale solo la primera vez que entra una cuenta nueva (lo dice la cuenta, no el aparato). */
+export async function maybeStartTour() {
   let done = false;
   try { done = localStorage.getItem(DONE_KEY) === "1"; } catch { /* sin almacenamiento */ }
-  if (!done) setTimeout(startTour, 900);  // un ratito, para que se dibuje la pantalla
+  if (done) return;
+  const me = await getMe().catch(() => null);
+  if (!me || me.tour_done) {
+    try { localStorage.setItem(DONE_KEY, "1"); } catch { /* sin almacenamiento */ }
+    return;
+  }
+  setTimeout(startTour, 900);  // un ratito, para que se dibuje la pantalla
 }
