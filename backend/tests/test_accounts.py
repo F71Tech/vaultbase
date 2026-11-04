@@ -14,7 +14,9 @@ def test_demo_crea_cuenta_con_datos_y_entra(client):
     h = {"Authorization": f"Bearer {res.json()['access_token']}"}
     me = client.get("/api/users/me", headers=h).json()
     assert demo.is_demo_email(me["email"])
-    ov = client.get("/api/finance/overview", headers=h).json()
+    assert me["name"] in demo.DEMO_NAMES
+    assert me["tour_done"] is False                          # la guía le sale al entrar
+    ov =client.get("/api/finance/overview", headers=h).json()
     assert ov["capacity"]["monthly_savings_cents"] > 0      # la demo tiene una economía sana
     assert len(ov["goals"]) == 3
     assert ov["year"]["months"][11]["aguinaldo_cents"] > 0   # el sueldo trae aguinaldo
@@ -27,6 +29,11 @@ def test_cada_demo_es_una_cuenta_distinta(client):
     me_a = client.get("/api/users/me", headers={"Authorization": f"Bearer {a}"}).json()
     me_b = client.get("/api/users/me", headers={"Authorization": f"Bearer {b}"}).json()
     assert me_a["id"] != me_b["id"]
+
+
+def test_los_archivos_de_la_app_se_revalidan(client):
+    # Para que nadie se quede con una versión vieja después de publicar un cambio
+    assert client.get("/js/tour.js").headers["cache-control"] == "no-cache"
 
 
 def test_las_demos_viejas_se_borran(session):

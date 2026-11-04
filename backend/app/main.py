@@ -78,6 +78,11 @@ async def security_headers(request: Request, call_next):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    # "no-cache" NO significa "no guardar": significa "antes de usar tu copia, preguntame si
+    # cambió". Si no cambió, el servidor responde en un instante sin mandar el archivo de nuevo.
+    # Sin esto, el navegador podía seguir usando una versión vieja de la app por horas.
+    if not request.url.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-cache"
     return response
 
 

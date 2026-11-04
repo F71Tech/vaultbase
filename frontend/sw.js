@@ -31,8 +31,10 @@ self.addEventListener("fetch", (event) => {
   // Solo GET de nuestro propio sitio, y nunca la API
   if (req.method !== "GET" || url.origin !== location.origin || url.pathname.startsWith("/api/")) return;
 
+  // "no-cache": preguntamos al servidor si hay versión nueva aunque el navegador tenga una copia guardada
+  const fresh = req.mode === "navigate" ? fetch(req) : fetch(req, { cache: "no-cache" });
   event.respondWith(
-    fetch(req)
+    fresh
       .then((res) => {
         if (res.ok) {
           const copy = res.clone();

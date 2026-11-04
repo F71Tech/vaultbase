@@ -24,6 +24,10 @@ from .salary import SalaryInput, calculate
 DEMO_DOMAIN = "demo.vaultbase.app"
 DEMO_TTL_HOURS = 6
 MONTHS_OF_HISTORY = 10
+DEMO_NAMES = (
+    "Sofía", "Martina", "Lucía", "Valentina", "Camila", "Florencia", "Agustina", "Micaela",
+    "Mateo", "Santiago", "Joaquín", "Facundo", "Nicolás", "Tomás", "Bruno", "Diego",
+)
 
 
 def is_demo_email(email: str) -> bool:
@@ -92,7 +96,7 @@ def create_demo_user(session: Session) -> User:
     rng = random.Random()  # distinto cada vez, para que cada demo sea un poco diferente
 
     user = User(
-        email=f"demo-{secrets.token_hex(4)}@{DEMO_DOMAIN}", name="Sofía",
+        email=f"demo-{secrets.token_hex(4)}@{DEMO_DOMAIN}", name=rng.choice(DEMO_NAMES),
         # Contraseña al azar que nadie conoce: a la demo solo se entra con el botón
         hashed_password=hash_password(secrets.token_urlsafe(24)), food_budget_pct=30,
     )
