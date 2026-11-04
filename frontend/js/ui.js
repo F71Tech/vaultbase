@@ -100,7 +100,7 @@ export function createSheet(innerHTML, { label = "Ventana" } = {}) {
   function close() {
     root.classList.remove("sheet-open");
     document.removeEventListener("keydown", onKey);
-    root.dispatchEvent(new CustomEvent("vb:sheet-close"));
+    root.dispatchEvent(new CustomEvent("vb:sheet-close", { bubbles: true }));
   }
   root.addEventListener("click", (e) => { if (e.target.closest("[data-close]")) close(); });
   enableSwipeToClose(root, close);
