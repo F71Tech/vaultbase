@@ -164,6 +164,14 @@ select.input { appearance: none; background-image: none; }
 .sidebar-link[aria-current="page"] { color: var(--primary); background: var(--primary-soft); }
 .sidebar-link svg { width: 20px; height: 20px; }
 
+/* En el celular la página entera NO scrollea: scrollea solo el contenido (.app-layout).
+   Si scrollea el documento, iOS a veces deja la barra y el "+" trancados a mitad de pantalla;
+   así quedan apoyados sobre algo que nunca se mueve. */
+@media (max-width: 767px) {
+  html:has(.app-layout), body:has(> .app-layout) { height: 100%; min-height: 0; overflow: hidden; overscroll-behavior: none; }
+  .app-layout { height: 100vh; height: 100dvh; overflow-y: auto; overscroll-behavior-y: contain; -webkit-overflow-scrolling: touch; }
+}
+
 .bottom-nav {
   position: fixed; inset: auto 0 0 0; z-index: 30; background: var(--surface);
   border-top: 1px solid var(--border); padding-bottom: env(safe-area-inset-bottom);
@@ -197,11 +205,9 @@ select.input { appearance: none; background-image: none; }
 .ptr.ready { color: var(--primary); }
 .ptr.spinning svg { animation: ptr-spin .7s linear infinite; }
 @keyframes ptr-spin { to { transform: rotate(360deg); } }
-/* Que el rebote de iOS no "arrastre" la pantalla entera al tirar */
-@media (display-mode: standalone) { html, body { overscroll-behavior-y: none; } }
 
 /* Con el tutorial abierto la página no se mueve (si no, el foco "persigue" al scroll y se ve trabado) */
-html.tour-open, html.tour-open body { overflow: hidden; overscroll-behavior: none; }
+html.tour-open, html.tour-open body, html.tour-open .app-layout { overflow: hidden; overscroll-behavior: none; }
 .tour.dim { background: rgba(2, 8, 20, .72); }
 .tour-spot {
   position: fixed; border-radius: 16px; pointer-events: none;
@@ -221,7 +227,7 @@ html.tour-open, html.tour-open body { overflow: hidden; overscroll-behavior: non
 }
 .sheet {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 50; margin: 0 auto; max-width: 560px;
-  max-height: 92vh; overflow-y: auto; border-radius: 24px 24px 0 0;
+  max-height: 92vh; overflow-y: auto; overscroll-behavior: contain; border-radius: 24px 24px 0 0;
   transform: translateY(105%); transition: transform .4s var(--ease);
   padding-bottom: calc(1.5rem + env(safe-area-inset-bottom));
 }

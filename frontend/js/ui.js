@@ -80,7 +80,8 @@ export function toggleTheme() {
 // --- Hojas inferiores (en celular) / modales (en escritorio) ---
 /**
  * Crea una hoja con el HTML dado. Devuelve { el, open, close }.
- * Se cierra tocando el fondo, con Escape o con cualquier [data-close].
+ * Se cierra tocando el fondo, con Escape, con cualquier [data-close] o, en el
+ * celular, deslizándola hacia abajo. Al cerrarse avisa con el evento "vb:sheet-close".
  */
 export function createSheet(innerHTML, { label = "Ventana" } = {}) {
   const root = document.createElement("div");
@@ -99,10 +100,67 @@ export function createSheet(innerHTML, { label = "Ventana" } = {}) {
   function close() {
     root.classList.remove("sheet-open");
     document.removeEventListener("keydown", onKey);
+    root.dispatchEvent(new CustomEvent("vb:sheet-close"));
   }
   root.addEventListener("click", (e) => { if (e.target.closest("[data-close]")) close(); });
+  enableSwipeToClose(root, close);
   icons();
   return { el: root, open, close };
+}
+
+const SWIPE_CLOSE_PX = 110;  // cuánto hay que bajarla para que se cierre...
+const SWIPE_FLICK = 0.6;     // ...o con qué velocidad (px por milisegundo), si fue un "tirón" rápido
+
+/** Deslizar la hoja hacia abajo para cerrarla (solo en celular: en escritorio es un modal). */
+function enableSwipeToClose(root, close) {
+  const sheet = root.querySelector(".sheet");
+  const backdrop = root.querySelector(".sheet-backdrop");
+  let start = null;
+  let dragging = false;
+  let dy = 0;
+
+  sheet.addEventListener("touchstart", (e) => {
+    dragging = false;
+    dy = 0;
+    // Solo si el contenido está arriba de todo (si no, deslizar es scrollear) y no sobre algo que
+    // ya usa el dedo: una barra deslizable, un gráfico o una fila que scrollea de costado.
+    const busyTarget = e.target.closest('input[type="range"], canvas, .no-scrollbar');
+    start = sheet.scrollTop <= 0 && !busyTarget && e.touches.length === 1 && matchMedia("(max-width: 767px)").matches
+      ? { x: e.touches[0].clientX, y: e.touches[0].clientY, t: Date.now() } : null;
+  }, { passive: true });
+
+  // passive: false para poder frenar el scroll del navegador mientras la arrastramos
+  sheet.addEventListener("touchmove", (e) => {
+    if (!start) return;
+    const dx = e.touches[0].clientX - start.x;
+    dy = e.touches[0].clientY - start.y;
+    if (!dragging) {
+      // El primer movimiento decide: hacia arriba o de costado no es arrastrar la hoja
+      if (dy <= 0 || Math.abs(dx) > dy) { start = null; return; }
+      dragging = true;
+      sheet.style.transition = backdrop.style.transition = "none";  // que siga al dedo sin retraso
+    }
+    e.preventDefault();
+    const pull = Math.max(0, dy);
+    sheet.style.transform = `translateY(${pull}px)`;
+    backdrop.style.opacity = String(Math.max(0, 1 - pull / (sheet.offsetHeight || 1)));
+  }, { passive: false });
+
+  const release = () => {
+    if (!dragging) { start = null; return; }
+    const speed = dy / Math.max(1, Date.now() - start.t);
+    dragging = false;
+    start = null;
+    // Sacamos los estilos de arrastre: la hoja vuelve (o se va) con su animación normal
+    sheet.style.transition = sheet.style.transform = "";
+    backdrop.style.transition = backdrop.style.opacity = "";
+    if (dy >= SWIPE_CLOSE_PX || (dy > 30 && speed >= SWIPE_FLICK)) {
+      document.activeElement?.blur();  // que también se baje el teclado
+      close();
+    }
+  };
+  sheet.addEventListener("touchend", release);
+  sheet.addEventListener("touchcancel", release);
 }
 
 /** Confirmación simple ("¿Borrar este gasto?") que devuelve true/false. */
@@ -114,12 +172,15 @@ export function confirmDialog(message, { confirmText = "Borrar" } = {}) {
         <button class="btn btn-ghost" data-close data-answer="no">Cancelar</button>
         <button class="btn btn-danger" data-close data-answer="yes">${esc(confirmText)}</button>
       </div>`, { label: "Confirmar" });
+    // "capture": anotamos la respuesta ANTES de que el clic cierre la hoja
+    let answer = null;
     sheet.el.addEventListener("click", (e) => {
-      const answer = e.target.closest("[data-answer]")?.dataset.answer;
-      if (answer || e.target.classList.contains("sheet-backdrop")) {
-        resolve(answer === "yes");
-        setTimeout(() => sheet.el.remove(), 400);
-      }
+      answer = e.target.closest("[data-answer]")?.dataset.answer ?? answer;
+    }, true);
+    // Cerrarla de cualquier otra forma (fondo, Escape, deslizar) cuenta como "no"
+    sheet.el.addEventListener("vb:sheet-close", () => {
+      resolve(answer === "yes");
+      setTimeout(() => sheet.el.remove(), 400);
     });
     sheet.open();
   });

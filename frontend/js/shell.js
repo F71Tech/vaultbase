@@ -8,7 +8,7 @@ import { api, auth, isDemoEmail, requireLogin } from "./api.js";
 import { openExpenseSheet } from "./expense-form.js";
 import { isInstalled, maybeSuggestInstall, openInstall } from "./install.js";
 import { setupRefresh } from "./refresh.js";
-import { startTour } from "./tour.js";
+import { resumeTour, startTour } from "./tour.js";
 import { confirmDialog, createSheet, esc, icons, toast, toggleTheme } from "./ui.js";
 
 const NAV = [
@@ -143,6 +143,7 @@ function openFeedback() {
 /** Aviso arriba de todo cuando se está usando una cuenta demo. */
 function showDemoBanner() {
   const banner = document.createElement("div");
+  banner.id = "demo-banner";
   banner.className = "card px-4 py-3 flex flex-wrap items-center gap-3 text-sm fade";
   banner.style.borderColor = "var(--accent)";
   banner.innerHTML = `
@@ -248,8 +249,15 @@ export function mountShell() {
     document.querySelectorAll("[data-admin-link]").forEach((el) => (el.hidden = !me.is_admin));
   }).catch(() => {});
 
+  // El teclado del iPhone puede correr la página y dejarla corrida al cerrarse: la devolvemos a su lugar
+  document.addEventListener("focusout", () => setTimeout(() => {
+    const typing = document.activeElement?.matches("input, textarea, select");
+    if (scrollY && !typing && matchMedia("(max-width: 767px)").matches) scrollTo(0, 0);
+  }, 100));
+
   maybeSuggestInstall();
   setupRefresh();
+  resumeTour();  // si venías en medio del recorrido completo, sigue en esta pantalla
   icons();
   return true;
 }

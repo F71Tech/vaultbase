@@ -468,7 +468,7 @@ async function init() {
   if (new URLSearchParams(location.search).get("tutorial") === "1") {
     history.replaceState(null, "", "/dashboard.html");
     startTour();
-  } else {
+  } else if (!document.querySelector(".tour")) {
     maybeStartTour();
   }
 }

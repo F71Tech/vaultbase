@@ -27,8 +27,9 @@ function setupPull() {
   let startY = null;
   let dy = 0;
   addEventListener("touchstart", (e) => {
-    // Solo si estás arriba de todo de la pantalla
-    startY = scrollY <= 0 && !busy() ? e.touches[0].clientY : null;
+    // Solo si estás arriba de todo de la pantalla (en el celular scrollea .app-layout, no la página)
+    const scrolled = scrollY + (document.querySelector(".app-layout")?.scrollTop || 0);
+    startY = scrolled <= 0 && !busy() ? e.touches[0].clientY : null;
     dy = 0;
   }, { passive: true });
   addEventListener("touchmove", (e) => {

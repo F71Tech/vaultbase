@@ -82,11 +82,14 @@ export function maybeSuggestInstall() {
   let tourDone = false;
   try { tourDone = localStorage.getItem("vb-tour-done") === "1"; } catch { /* sin almacenamiento */ }
   if (!tourDone) return;
+  const suggest = () => {
+    if (!document.documentElement.classList.contains("tour-open")) openInstall();
+  };
   window.addEventListener("beforeinstallprompt", (e) => {
     e.preventDefault();          // que no salga el cartel del navegador: usamos el nuestro
     deferredPrompt = e;
-    if (!snoozed()) setTimeout(openInstall, 2500);
+    if (!snoozed()) setTimeout(suggest, 2500);
   });
   const mobile = matchMedia("(max-width: 767px)").matches;
-  if (isIOS() && mobile && !snoozed()) setTimeout(openInstall, 2500);
+  if (isIOS() && mobile && !snoozed()) setTimeout(suggest, 2500);
 }

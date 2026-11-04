@@ -238,7 +238,7 @@ function init() {
       state.currency = w.currency;
       renderInstallmentOptions();
       simulate();
-      scrollTo({ top: 0, behavior: "smooth" });
+      document.querySelector("main").scrollIntoView({ behavior: "smooth", block: "start" });
     }
     if (editWish) openWishSheet(wishes.find((x) => x.id === Number(editWish.dataset.editWish)));
   });
