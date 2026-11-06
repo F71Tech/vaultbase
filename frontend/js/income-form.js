@@ -8,6 +8,7 @@ import { confirmDialog, createSheet, notifyDataChanged, toast } from "./ui.js";
 let sheet;
 let editing = null;
 let currency = "UYU";
+let previousMoney = false;  // ¿es "la plata que ya tenías"? (no es un ingreso de este mes)
 
 const template = `
   <form id="income-form" novalidate>
@@ -19,15 +20,16 @@ const template = `
       </div>
     </div>
     <div class="grid grid-cols-2 gap-3">
-      <label class="field col-span-2"><span>¿De dónde viene?</span>
+      <p id="if-previous-note" class="muted text-sm col-span-2" hidden>Lo que tenías cuando empezaste a usar la app: cuenta, efectivo, ahorros. Se suma a tu plata de hoy, pero no cuenta como ingreso del mes. Alcanza con cargarla una vez.</p>
+      <label class="field col-span-2" id="if-source-wrap"><span>¿De dónde viene?</span>
         <input id="if-source" class="input" maxlength="80" placeholder="Ej: Sueldo, Freelance, Alquiler" autofocus /></label>
       <label class="field"><span>Monto</span>
         <input id="if-amount" class="input" inputmode="decimal" placeholder="Ej: 45.000" /></label>
-      <label class="field"><span>Frecuencia</span>
+      <label class="field" id="if-frequency-wrap"><span>Frecuencia</span>
         <select id="if-frequency" class="input">
           ${Object.entries(FREQUENCY).map(([k, v]) => `<option value="${k}">${v}</option>`).join("")}
         </select></label>
-      <label class="field"><span id="if-start-label">Desde</span><input id="if-start" type="date" class="input" /></label>
+      <label class="field" id="if-start-wrap"><span id="if-start-label">Desde</span><input id="if-start" type="date" class="input" /></label>
       <label class="field" id="if-end-wrap"><span>Hasta (vacío = sigue)</span><input id="if-end" type="date" class="input" /></label>
     </div>
     <p id="if-onetime-warn" class="mt-3 rounded-xl bg-danger-soft p-3 text-xs flex gap-2 items-start" hidden>
@@ -36,7 +38,7 @@ const template = `
         (y tu plata y tus metas van a dar mucho menos). Si tu sueldo varía, dejalo <b>Mensual</b> con el sueldo base
         y anotá las comisiones aparte.</span>
     </p>
-    <label class="flex items-start gap-2 text-sm cursor-pointer mt-3">
+    <label class="flex items-start gap-2 text-sm cursor-pointer mt-3" id="if-food-wrap">
       <input type="checkbox" id="if-food-only" style="accent-color:var(--accent)" class="w-4 h-4 mt-0.5" />
       <span>Es un <b>ticket de alimentación</b> (otra tarjeta, solo para comida)
         <span class="muted text-xs block">No se suma a tu plata libre: paga primero tus gastos de comida.</span></span>
@@ -82,6 +84,8 @@ const $ = (sel) => sheet.el.querySelector(sel);
 
 function syncFields() {
   const oneTime = $("#if-frequency").value === "one_time";
+  for (const id of ["#if-source-wrap", "#if-frequency-wrap", "#if-start-wrap", "#if-food-wrap"]) $(id).hidden = previousMoney;
+  $("#if-previous-note").hidden = !previousMoney;
   $("#if-end-wrap").hidden = oneTime;
   $("#if-start-label").textContent = oneTime ? "Fecha de cobro" : "Desde";
   $("#if-monthly").hidden = $("#if-frequency").value !== "monthly";
@@ -144,6 +148,7 @@ function ensureSheet() {
       advance_cents: null, advance_day: null, commission_floor_cents: null,
       food_only: $("#if-food-only").checked,
     };
+    if (!editing) body.previous_money = previousMoney;
     const extras = !body.food_only;  // el ticket no tiene adelanto ni comisiones
     if (frequency === "monthly") {
       const day = (id, fallback) => Number($(id).value || fallback);
@@ -167,7 +172,7 @@ function ensureSheet() {
       await api(editing ? `/api/incomes/${editing.id}` : "/api/incomes",
         { method: editing ? "PATCH" : "POST", body });
       // Un cobro único solo aparece en la lista de SU mes: decimos cuál, para que no parezca perdido
-      toast(frequency === "one_time"
+      toast(previousMoney ? "Listo: ya está sumada a tu plata" : frequency === "one_time"
         ? `Guardado como cobro único del ${shortDate(body.start_date)}`
         : editing ? "Ingreso actualizado" : "Ingreso guardado");
       sheet.close();
@@ -188,8 +193,10 @@ export function openIncomeSheet(income = null, prefill = {}) {
   ensureSheet();
   editing = income;
   const i = income ?? prefill;
+  previousMoney = Boolean(i.previous_money);
   currency = i.currency ?? "UYU";
-  $("#if-title").textContent = income ? "Editar ingreso" : "Nuevo ingreso";
+  $("#if-title").textContent = previousMoney ? "Plata que ya tenías"
+    : income ? "Editar ingreso" : i.frequency === "one_time" ? "Ingreso puntual" : "Nuevo ingreso";
   $("#if-source").value = i.source ?? "";
   $("#if-amount").value = income ? centsToInput(i.amount_cents) : "";
   $("#if-frequency").value = i.frequency ?? "monthly";

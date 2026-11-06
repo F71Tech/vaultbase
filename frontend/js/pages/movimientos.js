@@ -121,7 +121,7 @@ function renderIncomes() {
         <span class="icon-badge bg-primary-soft text-primary"><i data-lucide="trending-up"></i></span>
         <span class="flex-1 min-w-0">
           <span class="block font-medium truncate">${esc(i.source)}</span>
-          <span class="block muted text-xs">${i.food_only ? "Ticket · solo comida · " : ""}${FREQUENCY[i.frequency]} · ${i.frequency === "one_time" ? shortDate(i.start_date) : "desde " + shortDate(i.start_date)}${i.end_date ? " hasta " + shortDate(i.end_date) : ""}</span>
+          <span class="block muted text-xs">${i.previous_money ? "Ya la tenías · no cuenta como ingreso del mes" : `${i.food_only ? "Ticket · solo comida · " : ""}${FREQUENCY[i.frequency]} · ${i.frequency === "one_time" ? shortDate(i.start_date) : "desde " + shortDate(i.start_date)}${i.end_date ? " hasta " + shortDate(i.end_date) : ""}`}</span>
         </span>
         <span class="font-semibold text-primary">${moneyExact(i.amount_cents, i.currency)}</span>
       </button>${payRecordLine(i)}`).join("")
@@ -175,9 +175,9 @@ async function load() {
     allIncomes: incomes,
     variable: monthItems,
     fixed: fixedAll.filter((e) => activeInMonth(e, "date", range)),
-    incomes: incomes.filter((i) => i.frequency === "one_time"
+    incomes: incomes.filter((i) => i.previous_money || (i.frequency === "one_time"
       ? i.start_date >= range.from && i.start_date <= range.to
-      : activeInMonth(i, "start_date", range)),
+      : activeInMonth(i, "start_date", range))),
     summary,
   };
   renderExpenses();
@@ -227,6 +227,7 @@ async function init() {
   $("add-variable").addEventListener("click", () => openExpenseSheet());
   $("add-fixed").addEventListener("click", () => openExpenseSheet(null, { kind: "fixed" }));
   $("add-income").addEventListener("click", () => openIncomeSheet());
+  $("add-one-time").addEventListener("click", () => openIncomeSheet(null, { frequency: "one_time" }));
   $("add-commission").addEventListener("click", () => openCommissionSheet(null, { salaryPayDay: cache.salary?.pay_day ?? 30 }));
   onDataChanged(load);
 

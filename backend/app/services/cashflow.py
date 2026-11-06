@@ -42,7 +42,8 @@ class CashEvent(BaseModel):
 class MoneyNow(BaseModel):
     received_cents: int               # lo que te entró desde tracked_from
     spent_cents: int                  # lo que gastaste desde entonces (positivo)
-    current_cents: int                # plata de HOY = recibido - gastado (acumulado)
+    previous_cents: int               # la plata que ya tenías antes de usar la app
+    current_cents: int                # plata de HOY = ya tenías + recibido - gastado (acumulado)
     tracked_from: dt.date             # desde cuándo se suma (el cobro anterior a crear tu cuenta)
     since: dt.date                    # tu último cobro (o el día 1 si no hay sueldo)
     next_pay: dt.date                 # tu próximo cobro
@@ -175,7 +176,7 @@ def scheduled_events(data: finance.FinanceData, start: dt.date, end: dt.date, ra
             events.append(CashEvent(date=e.date, label=e.description or spending_label(e.category, e.subcategory),
                                     amount_cents=-amount, kind="one_off"))
     for i in data.incomes:
-        if i.frequency == IncomeFrequency.one_time and start <= i.start_date <= end:
+        if i.frequency == IncomeFrequency.one_time and not i.previous_money and start <= i.start_date <= end:
             amount = finance.to_uyu(i.amount_cents, i.currency, rate)
             events.append(CashEvent(date=i.start_date, label=i.source, amount_cents=amount, kind="income"))
     return sorted(events, key=lambda ev: ev.date)
@@ -248,7 +249,7 @@ def tracking_start(data: finance.FinanceData, since: dt.date, rate: float | None
         # Sin sueldo mensual: desde el cobro único más cercano antes de empezar
         # (ej: el sueldo del 30/10 cargado como "única vez", si te anotaste el 2/11)
         recent = [i.start_date for i in data.incomes
-                  if i.frequency == IncomeFrequency.one_time and not i.food_only
+                  if i.frequency == IncomeFrequency.one_time and not i.food_only and not i.previous_money
                   and data.joined - dt.timedelta(days=31) <= i.start_date <= since]
         return min([since, *recent])
     start, _ = pay_cycle(data, data.joined, rate)
@@ -280,7 +281,10 @@ def money_now(
         month_ticket = finance.food_ticket_in_month(data, y, m, rate)
         covered += finance.ticket_split(food, month_ticket, rate) if month_ticket else 0
     spent -= covered
-    current = received - spent
+    # La plata que ya tenías cuenta siempre, sea cual sea el día en que arranca el cálculo
+    previous = sum(finance.to_uyu(i.amount_cents, i.currency, rate) for i in data.incomes
+                   if i.previous_money and i.start_date <= today)
+    current = previous + received - spent
 
     # Para mostrar: el ticket de ESTE mes (cuánto usaste y cuánto te queda)
     ticket = finance.food_ticket_in_month(data, today.year, today.month, rate)
@@ -313,7 +317,7 @@ def money_now(
     can_save_high = max(current + incoming_high - bills - usual, 0)
 
     return MoneyNow(
-        received_cents=received, spent_cents=spent, current_cents=current,
+        received_cents=received, spent_cents=spent, previous_cents=previous, current_cents=current,
         since=since, tracked_from=tracked_from, next_pay=next_pay, period_end=period_end, days_left=days_left, upcoming=upcoming,
         incoming_cents=incoming, incoming_high_cents=incoming_high,
         has_commissions=any(ev.kind == "commission" for ev in upcoming + so_far),

@@ -79,6 +79,8 @@ def _active_in(start: dt.date, end: dt.date | None, first: dt.date, last: dt.dat
 # --- Montos de cada elemento en un mes dado ---------------------------------
 
 def income_in_month(income: Income, year: int, month: int, rate: float | None) -> int:
+    if income.previous_money:
+        return 0  # ya la tenías: no te entró este mes
     first, last = month_bounds(year, month)
     amount = to_uyu(income.amount_cents, income.currency, rate)
     if income.frequency == IncomeFrequency.one_time:

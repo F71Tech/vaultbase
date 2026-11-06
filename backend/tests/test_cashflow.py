@@ -271,3 +271,42 @@ def test_sueldo_como_unica_vez_antes_de_empezar_cuenta():
     m = money_now(data, HOY, RATE)
     assert m.tracked_from == dt.date(2026, 10, 30)
     assert m.current_cents == 3_010_800 - 400_000          # ya no da negativo
+
+
+# --- Plata que ya tenías e ingresos puntuales -------------------------------
+
+def test_plata_que_ya_tenia_suma_hoy_pero_no_es_ingreso_del_mes():
+    data = datos()
+    sin_ella = money_now(data, HOY, RATE)
+    # Con fecha vieja, a propósito: cuenta igual, sea cual sea el inicio del cálculo
+    data.incomes.append(Income(id=2, user_id=1, source="Plata que ya tenía", amount_cents=10_000_000,
+                               frequency="one_time", previous_money=True, start_date=dt.date(2026, 1, 1)))
+    con_ella = money_now(data, HOY, RATE)
+    assert con_ella.previous_cents == 10_000_000
+    assert con_ella.current_cents == sin_ella.current_cents + 10_000_000
+    assert con_ella.received_cents == sin_ella.received_cents
+    assert finance.income_in_month(data.incomes[-1], 2026, 1, RATE) == 0
+
+
+def test_plata_que_ya_tenia_en_dolares():
+    data = datos()
+    data.incomes.append(Income(id=2, user_id=1, source="Dólares guardados", amount_cents=100_000, currency="USD",
+                               frequency="one_time", previous_money=True, start_date=HOY))
+    assert money_now(data, HOY, RATE).previous_cents == 4_000_000
+
+
+def test_ingreso_puntual_suma_hoy_y_es_ingreso_del_mes():
+    data = datos()
+    sin_el = money_now(data, HOY, RATE)
+    data.incomes.append(Income(id=2, user_id=1, source="Changa", amount_cents=500_000,
+                               frequency="one_time", start_date=dt.date(2026, 11, 9)))
+    assert money_now(data, HOY, RATE).current_cents == sin_el.current_cents + 500_000
+    assert finance.income_in_month(data.incomes[-1], 2026, 11, RATE) == 500_000
+
+
+def test_la_api_guarda_la_plata_que_ya_tenia_como_unica_vez(client, auth):
+    res = client.post("/api/incomes", headers=auth, json={
+        "source": "Plata que ya tenía", "amount_cents": 1_000_000, "frequency": "monthly", "previous_money": True})
+    assert res.status_code == 201
+    assert res.json()["frequency"] == "one_time" and res.json()["previous_money"] is True
+    assert client.get("/api/finance/overview", headers=auth).json()["money"]["previous_cents"] == 1_000_000

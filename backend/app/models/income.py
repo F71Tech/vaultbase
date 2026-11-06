@@ -41,6 +41,9 @@ class IncomeBase(SQLModel):
     # Ticket de alimentación (u otra tarjeta que solo sirve para comida): es un
     # ingreso real, pero no es plata libre. Paga tus gastos de comida primero.
     food_only: bool = False
+    # Plata que ya tenías antes de usar la app: suma a "Tu plata hoy", pero no es
+    # un ingreso de este mes (no cuenta en resúmenes ni en el gráfico).
+    previous_money: bool = False
 
 
 def check_advance(advance_cents: int | None, amount_cents: int | None) -> None:
@@ -62,6 +65,8 @@ class IncomeCreate(IncomeBase):
     @model_validator(mode="after")
     def _adelanto_valido(self):
         check_advance(self.advance_cents, self.amount_cents)
+        if self.previous_money:
+            self.frequency = IncomeFrequency.one_time  # es una sola vez, siempre
         return self
 
 

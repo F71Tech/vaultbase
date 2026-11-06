@@ -67,7 +67,7 @@ function renderMoney() {
   const m = overview.money;
   const box = $("money");
   // Cuenta nueva sin movimientos: no hay nada que mostrar todavía
-  box.hidden = !m.received_cents && !m.spent_cents && !m.upcoming.length;
+  box.hidden = !m.previous_cents && !m.received_cents && !m.spent_cents && !m.upcoming.length;
   if (box.hidden) return;
   const end = shortDate(m.period_end);
   const short = m.short_cents > 0;
@@ -78,8 +78,13 @@ function renderMoney() {
         <div class="flex items-center gap-2 muted text-sm"><i data-lucide="wallet" class="w-4 h-4"></i>Tu plata hoy</div>
         <div class="font-display text-4xl font-bold mt-1 ${m.current_cents < 0 ? "text-danger" : ""}" id="money-current">$ 0</div>
         <div class="text-xs mt-2 space-y-0.5">
+          ${m.previous_cents ? `<div class="flex justify-between gap-3"><span class="muted">Ya tenías</span><span class="text-success">+${money(m.previous_cents)}</span></div>` : ""}
           <div class="flex justify-between gap-3"><span class="muted">Te entró desde el ${shortDate(m.tracked_from)}</span><span class="text-success">+${money(m.received_cents)}</span></div>
           <div class="flex justify-between gap-3"><span class="muted">Gastaste hasta hoy</span><span>−${money(m.spent_cents)}</span></div>
+        </div>
+        <div class="flex flex-wrap gap-2 mt-3">
+          <button class="chip" data-one-time><i data-lucide="plus" class="w-3.5 h-3.5 text-primary"></i>Ingreso puntual</button>
+          <button class="chip" data-previous-money><i data-lucide="${m.previous_cents ? "pencil" : "plus"}" class="w-3.5 h-3.5 text-primary"></i>Plata que ya tenías</button>
         </div>
         ${m.tracked_from < m.since ? `<p class="muted text-xs mt-1">Incluye lo que te sobró de antes de tu último cobro (${shortDate(m.since)}): la plata no se "reinicia" cada mes.</p>` : ""}
         ${m.current_cents < 0 ? `<div class="mt-3 rounded-xl bg-accent-soft p-3 text-xs">
@@ -138,7 +143,7 @@ function renderStats() {
   const noRecurring = overview.capacity.recurring_income_cents <= 0;
   const monthAgo = new Date(Date.now() - 45 * 86400000).toISOString().slice(0, 10);
   oneTimeSalary = noRecurring ? payInfo.incomes.find((i) => i.frequency === "one_time" && !i.food_only
-    && i.start_date >= monthAgo && !/ya ten[ií]a/i.test(i.source)) : null;
+    && i.start_date >= monthAgo && !i.previous_money) : null;
   $("salary-hint").hidden = !oneTimeSalary;
   if (oneTimeSalary) {
     $("salary-hint").innerHTML = `
@@ -419,17 +424,25 @@ async function load() {
   icons();
 }
 
+// Una sola por cuenta: si ya la cargaste, se abre para corregirla
+function openPreviousMoney() {
+  const saved = payInfo.incomes.find((i) => i.previous_money);
+  openIncomeSheet(saved ?? null, { source: "Plata que ya tenía", frequency: "one_time", previous_money: true });
+}
+
 async function init() {
   $("today").textContent = longToday();
   cats = await getCategories();
   $("onboard-income").addEventListener("click", () => openIncomeSheet());
+  $("onboard-previous").addEventListener("click", openPreviousMoney);
   $("food-pct").addEventListener("click", openFoodSheet);
   $("money").addEventListener("click", (e) => {
     if (e.target.closest("[data-pay-now]") && payInfo.salary) openPaySheet(payInfo.salary);
     // Plata que ya tenías antes de usar la app: un ingreso único el día en que arranca el cálculo
     if (e.target.closest("[data-previous-money]")) {
-      openIncomeSheet(null, { source: "Plata que ya tenía", frequency: "one_time", start_date: overview.money.tracked_from });
+      openPreviousMoney();
     }
+    if (e.target.closest("[data-one-time]")) openIncomeSheet(null, { frequency: "one_time" });
   });
   // "Pasarlo a mensual": abre el ingreso ya cambiado a Mensual, con el día de cobro
   // de ese cobro único (ej: 30). La fecha "desde" queda en ese cobro.
