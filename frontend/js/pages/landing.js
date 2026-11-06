@@ -1,5 +1,6 @@
 // landing.js · Portada: barra fija, recorrido por la app y animaciones.
-// En la compu el recorrido avanza con el scroll; en el celular, con el dedo.
+// En la compu la app se explica con paneles grandes; en el celular, con un
+// teléfono que se desliza con el dedo.
 
 import { startDemo } from "../api.js";
 import { money } from "../format.js";
@@ -8,7 +9,7 @@ import { countUp, reducedMotion } from "../ui.js";
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-const isDesktop = () => matchMedia("(min-width: 1024px)").matches;
+const isDesktop = () => matchMedia("(min-width: 768px)").matches;
 const calm = reducedMotion();
 
 // --- Probar la demo (hay un botón arriba y otro al final) ---
@@ -164,17 +165,28 @@ if (!calm) {
   }, 6500);
 }
 
-// Compu: la pantalla cambia según el texto que está en el medio
-const textWatcher = new IntersectionObserver((entries) => {
-  if (!isDesktop()) return;
-  entries.forEach((entry) => { if (entry.isIntersecting) show(texts.indexOf(entry.target)); });
-}, { rootMargin: "-45% 0px -45% 0px" });
-texts.forEach((t) => textWatcher.observe(t));
+// Los paneles de la compu también se animan, al llegar con el scroll
+const STORIES = {
+  count: countAll,
+  expense: (root) => playExpense(root, playId),
+};
+
+// Hacer zoom o achicar la ventana puede pasar de la versión compu a la de celular
+// (o al revés): sacamos los desplazamientos que quedaron de la otra versión.
+matchMedia("(min-width: 768px)").addEventListener("change", () => {
+  $$("[data-depth]").forEach((el) => { el.style.translate = ""; });
+  const browser = $(".browser");
+  if (browser) browser.style.transform = "";
+  onScroll();
+});
 
 // --- Aparecer al llegar con el scroll ---
 const targets = $$(".reveal, .step-line");
 if (calm || !("IntersectionObserver" in window)) {
-  targets.forEach((el) => el.classList.add("in"));
+  targets.forEach((el) => {
+    el.classList.add("in");
+    STORIES[el.dataset.story]?.(el);
+  });
   show(0);
 } else {
   // Recién acá escondemos: sin JavaScript la página se ve completa igual
@@ -183,6 +195,7 @@ if (calm || !("IntersectionObserver" in window)) {
     entries.forEach((entry) => {
       if (!entry.isIntersecting) return;
       entry.target.classList.add("in");
+      STORIES[entry.target.dataset.story]?.(entry.target);
       seen.unobserve(entry.target);
     });
   }, { threshold: 0.15, rootMargin: "0px 0px -6% 0px" });

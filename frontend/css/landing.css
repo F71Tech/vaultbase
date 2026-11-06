@@ -1,8 +1,8 @@
 /* =========================================================================
    landing.css · La portada.
    Mismo contenido, dos personalidades:
-   - Computadora: celular fijo que cambia con el scroll, tarjetas que siguen
-     al mouse y una ventana de navegador con la versión web.
+   - Computadora: portada con el celular, paneles grandes que explican la app,
+     tarjetas que siguen al mouse y una ventana de navegador con la versión web.
    - Celular: un teléfono que se desliza con el dedo y cómo instalar la app.
    El movimiento arranca cuando cada cosa entra en pantalla (landing.js le pone
    la clase .in). Sin JavaScript o con "menos movimiento" se ve todo igual.
@@ -101,11 +101,11 @@ html { scroll-behavior: smooth; scroll-padding-top: 5rem; }
 .float.slow { animation-duration: 9s; animation-delay: -3s; }
 @keyframes float { 50% { transform: translateY(-9px); } }
 /* En el celular el teléfono asoma, cortado abajo, y sube un poco con el scroll */
-@media (max-width: 1023px) {
+@media (max-width: 767px) {
   .hero-stage { height: 410px; overflow: hidden; margin-inline: -1rem; padding-top: 14px; -webkit-mask-image: linear-gradient(#000 82%, transparent); mask-image: linear-gradient(#000 82%, transparent); }
   .hero-card { left: 1rem; bottom: 70px; width: 9.5rem; }
 }
-@media (min-width: 1024px) {
+@media (min-width: 768px) {
   .hero-stage { min-height: 600px; align-items: center; }
   [data-depth] { transition: translate .25s ease-out; }
   /* Las tarjetas van por fuera del teléfono: apenas lo pisan, para no tapar sus números */
@@ -115,7 +115,8 @@ html { scroll-behavior: smooth; scroll-padding-top: 5rem; }
   .hero-card.spot-3 { right: -3rem; bottom: 5rem; }
   .hero-card.spot-4 { left: -3rem; bottom: 3rem; }
 }
-/* Con la pantalla justa no entran las cuatro: queda la del ahorro */
+/* Con la pantalla justa no entran las cuatro: queda la del ahorro, y si no entra, ninguna */
+@media (min-width: 768px) and (max-width: 1023px) { .hero-card { display: none; } }
 @media (min-width: 1024px) and (max-width: 1279px) {
   .hero-card.spot-2, .hero-card.spot-3, .hero-card.spot-4 { display: none; }
   .hero-card.spot-1 { left: -1rem; top: auto; bottom: 2.5rem; width: 9rem; }
@@ -148,7 +149,7 @@ html { scroll-behavior: smooth; scroll-padding-top: 5rem; }
 .tour-chips button { flex-shrink: 0; }
 .tour-stage { touch-action: pan-y; }
 /* Celular: se ve un solo texto, el del teléfono */
-@media (max-width: 1023px) {
+@media (max-width: 767px) {
   .tour-chips { display: flex; gap: .5rem; overflow-x: auto; margin-inline: -1rem; padding: .25rem 1rem .75rem; scrollbar-width: none; }
   .tour-text { display: none; text-align: center; }
   .tour-text.on { display: block; animation: rise .45s var(--ease) both; }
@@ -156,14 +157,6 @@ html { scroll-behavior: smooth; scroll-padding-top: 5rem; }
   .tour-texts { min-height: 11.5rem; }
   .tour-stage { display: flex; justify-content: center; }
 }
-/* Compu: los textos pasan con el scroll y el teléfono queda fijo al lado */
-@media (min-width: 1024px) {
-  .tour-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4rem; }
-  .tour-text { min-height: 78vh; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; opacity: .25; transition: opacity .5s ease; }
-  .tour-text.on { opacity: 1; }
-  .tour-stage { position: sticky; top: calc(50vh - 280px); height: 560px; display: flex; justify-content: center; }
-}
-
 /* Gasto rápido: la hoja sube, se "escribe" el monto y se guarda */
 .phone-sheet {
   position: absolute; inset: auto 0 0; z-index: 4; padding: 12px 13px 16px; border-radius: 20px 20px 0 0;
@@ -198,6 +191,21 @@ html { scroll-behavior: smooth; scroll-padding-top: 5rem; }
 .mock-fill { display: block; height: 100%; width: 0; border-radius: inherit; transition: width 1.3s var(--ease) .3s; }
 .in .mock-fill { width: var(--w); }
 .phone-best { border-color: #F5C542; box-shadow: 0 0 22px -8px #F5C542; }
+
+/* ===== Compu: paneles grandes (mismos dibujos, a tamaño web y con los colores del tema) ===== */
+.web-points { display: grid; gap: .6rem; margin-top: 1.25rem; }
+.web-points li { display: flex; gap: .6rem; align-items: flex-start; }
+.web-points svg { width: 18px; height: 18px; flex-shrink: 0; margin-top: 3px; color: var(--primary); }
+.web-panel .mock-amount { font-size: 3.25rem; color: var(--primary); }
+.web-panel .mock-cat { gap: .35rem; padding: .8rem .25rem; font-size: .78rem; border-color: var(--border); background: var(--surface-2); }
+.web-panel .mock-cat svg { width: 22px; height: 22px; }
+.web-panel .mock-cat.on { border-color: var(--primary); background: var(--primary-soft); color: var(--primary); }
+.web-panel .mock-save { padding: .75rem; margin-top: 1rem; border-radius: var(--radius-sm); background: var(--primary); color: var(--on-primary); }
+.web-panel .mock-toast { position: static; margin-top: .75rem; padding: .7rem .9rem; font-size: .9rem; background: var(--surface-2); }
+.web-panel .mock-toast svg { width: 18px; height: 18px; }
+.web-panel .mock-ring .track { stroke: var(--surface-2); }
+.web-panel .mock-ring .value { stroke: var(--accent); }
+.web-panel .mock-stack { height: 14px; background: var(--surface-2); }
 
 /* ===== Compu: ventana de navegador que se inclina con el mouse ===== */
 .browser { border-radius: 16px; overflow: hidden; border: 1px solid var(--border); background: var(--surface); box-shadow: 0 40px 90px -40px rgba(79, 179, 232, .45), var(--shadow); transition: transform .25s ease-out; transform-style: preserve-3d; }

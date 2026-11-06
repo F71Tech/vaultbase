@@ -190,7 +190,8 @@ export function mountShell() {
 
   // --- Menú lateral (escritorio) ---
   const sidebar = document.getElementById("sidebar");
-  sidebar.className = "hidden md:flex flex-col w-60 shrink-0 pt-8 sticky top-0 h-screen";
+  // overflow-y-auto: con zoom alto la ventana "mide" menos y el menú tiene que poder scrollear
+  sidebar.className = "hidden md:flex flex-col w-60 shrink-0 pt-8 sticky top-0 h-screen overflow-y-auto";
   sidebar.innerHTML = `
       <a href="/dashboard.html" class="font-display text-2xl font-bold mb-8 px-3">Vault<span class="text-primary">Base</span></a>
       <nav class="flex flex-col gap-1">
