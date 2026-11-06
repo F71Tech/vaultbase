@@ -4,8 +4,8 @@ from fastapi import APIRouter, HTTPException, Response, status
 
 from ..config import get_settings
 from ..deps import CurrentUser, SessionDep
-from ..models import Feedback, FeedbackCreate, PasswordChange, User, UserRead, UserUpdate
-from ..security import hash_password, verify_password
+from ..models import Feedback, FeedbackCreate, PasswordChange, Token, User, UserRead, UserUpdate
+from ..security import create_access_token, hash_password, verify_password
 from ..services.accounts import delete_user_data
 
 router = APIRouter(prefix="/api/users", tags=["Usuario"])
@@ -32,15 +32,19 @@ def update_me(data: UserUpdate, user: CurrentUser, session: SessionDep):
     return as_read(user)
 
 
-@router.post("/me/password", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/me/password", response_model=Token)
 def change_password(data: PasswordChange, user: CurrentUser, session: SessionDep):
-    """Cambia tu contraseña (hay que saber la actual)."""
+    """
+    Cambia tu contraseña (hay que saber la actual) y cierra las sesiones de tus
+    otros aparatos. Devuelve un token nuevo para que este aparato siga adentro.
+    """
     if not verify_password(data.current_password, user.hashed_password):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "La contraseña actual no es correcta")
     user.hashed_password = hash_password(data.new_password)
+    user.token_version += 1
     session.add(user)
     session.commit()
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    return Token(access_token=create_access_token(user.id, user.token_version))
 
 
 @router.post("/me/feedback", status_code=status.HTTP_201_CREATED)

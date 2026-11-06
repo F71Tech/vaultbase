@@ -82,10 +82,11 @@ async function openAccount() {
       const next = q("#acc-pass-new").value;
       if (next.length < 8) return err("La nueva tiene que tener al menos 8 caracteres.");
       try {
-        await api("/api/users/me/password", { method: "POST", body: { current_password: current, new_password: next } });
+        const { access_token } = await api("/api/users/me/password", { method: "POST", body: { current_password: current, new_password: next } });
+        auth.renew(access_token);  // este aparato sigue adentro; los demás tienen que volver a entrar
         q("#acc-pass-form").reset();
         err("");
-        toast("Contraseña cambiada");
+        toast("Contraseña cambiada. Se cerró la sesión en tus otros aparatos.");
       } catch (error) { err(error.message); }
     });
     q("#acc-share").addEventListener("change", async () => {

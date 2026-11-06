@@ -27,9 +27,36 @@ def test_cambiar_contrasena(client, auth):
     assert mal.status_code == 400
     ok = client.post("/api/users/me/password", json={"current_password": PASSWORD, "new_password": "nueva-clave-123"},
                      headers=auth)
-    assert ok.status_code == 204
+    assert ok.status_code == 200
     assert login(client, "ana@example.com", "nueva-clave-123").status_code == 200
     assert login(client, "ana@example.com", PASSWORD).status_code == 401
+
+
+def me(client, token):
+    return client.get("/api/users/me", headers={"Authorization": f"Bearer {token}"}).status_code
+
+
+def test_cambiar_contrasena_cierra_las_otras_sesiones(client, auth):
+    otro_aparato = login(client, "ana@example.com", PASSWORD).json()["access_token"]
+    assert me(client, otro_aparato) == 200
+    res = client.post("/api/users/me/password", headers=auth,
+                      json={"current_password": PASSWORD, "new_password": "nueva-clave-123"})
+    # El otro aparato y el token viejo de este quedan afuera; el token nuevo sirve
+    assert me(client, otro_aparato) == 401
+    assert client.get("/api/users/me", headers=auth).status_code == 401
+    assert me(client, res.json()["access_token"]) == 200
+    # Y al volver a entrar con la clave nueva, también
+    assert me(client, login(client, "ana@example.com", "nueva-clave-123").json()["access_token"]) == 200
+
+
+def test_una_sesion_de_antes_del_cambio_sigue_valiendo(client, auth):
+    # Los tokens que ya estaban repartidos no traen versión: nadie queda afuera por esta mejora
+    import jwt
+    from backend.app.security import ALGORITHM
+    viejo = auth["Authorization"].split()[1]
+    datos = jwt.decode(viejo, get_settings().secret_key, algorithms=[ALGORITHM])
+    del datos["ver"]
+    assert me(client, jwt.encode(datos, get_settings().secret_key, algorithm=ALGORITHM)) == 200
 
 
 def test_tutorial_solo_la_primera_vez(client, auth):
@@ -47,7 +74,9 @@ def test_link_para_restablecer(client, make_user, admin):
     url = client.post(f"/api/admin/users/{ana_id}/reset-link", headers=admin).json()["url"]
     token = url.split("token=")[1]
     assert "/restablecer.html?token=" in url
+    assert client.get("/api/users/me", headers=ana).status_code == 200
     assert client.post("/api/auth/reset", json={"token": token, "new_password": "olvidada-no-mas"}).status_code == 204
+    assert client.get("/api/users/me", headers=ana).status_code == 401  # el link cierra las sesiones abiertas
     assert login(client, "ana@example.com", "olvidada-no-mas").status_code == 200
     # Es de un solo uso
     assert client.post("/api/auth/reset", json={"token": token, "new_password": "otra-mas-123"}).status_code == 400

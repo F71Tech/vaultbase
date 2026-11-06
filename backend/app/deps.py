@@ -32,11 +32,14 @@ def get_current_user(
         detail="Sesión inválida o vencida. Volvé a iniciar sesión.",
         headers={"WWW-Authenticate": "Bearer"},
     )
-    user_id = decode_access_token(token)
-    if user_id is None:
+    decoded = decode_access_token(token)
+    if decoded is None:
         raise credentials_error
+    user_id, version = decoded
     user = session.get(User, user_id)
     if user is None:  # el usuario fue borrado después de recibir el token
+        raise credentials_error
+    if version != user.token_version:  # cambió la contraseña después de recibir el token
         raise credentials_error
     return user
 

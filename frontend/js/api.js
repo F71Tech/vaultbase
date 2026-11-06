@@ -17,6 +17,8 @@ export const auth = {
     if (demo) localStorage.setItem(DEMO_KEY, "1");
     else localStorage.removeItem(DEMO_KEY);
   },
+  // Token nuevo para la MISMA sesión (ej: cambiaste la contraseña): sigue siendo o no una demo
+  renew(token) { localStorage.setItem(TOKEN_KEY, token); },
   clear() {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(DEMO_KEY);

@@ -56,7 +56,7 @@ def login(form: Annotated[OAuth2PasswordRequestForm, Depends()], session: Sessio
             "Email o contraseña incorrectos",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    return Token(access_token=create_access_token(user.id))
+    return Token(access_token=create_access_token(user.id, user.token_version))
 
 
 def hash_token(token: str) -> str:
@@ -73,6 +73,7 @@ def reset_password(data: PasswordResetIn, session: SessionDep):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "El link venció o ya se usó. Pedí uno nuevo.")
     user = session.get(User, reset.user_id)
     user.hashed_password = hash_password(data.new_password)
+    user.token_version += 1  # cierra todas las sesiones abiertas
     reset.used_at = utcnow()
     session.add_all([user, reset])
     session.commit()
@@ -86,4 +87,4 @@ def demo(session: SessionDep):
     Cada visitante recibe su propia demo; se borran solas a las pocas horas.
     """
     user = create_demo_user(session)
-    return Token(access_token=create_access_token(user.id))
+    return Token(access_token=create_access_token(user.id, user.token_version))

@@ -35,6 +35,8 @@ class User(UserBase, table=True):
     shares_data: bool = False
     # Ya vio el tutorial (se guarda en la cuenta: sale solo la primera vez, en cualquier aparato)
     tour_done: bool = False
+    # Sube al cambiar la contraseña: las sesiones firmadas con un número anterior dejan de valer.
+    token_version: int = 0
     created_at: dt.datetime = Field(default_factory=utcnow)
 
 
