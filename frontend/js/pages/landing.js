@@ -6,6 +6,11 @@ import { startDemo } from "../api.js";
 import { money } from "../format.js";
 import { countUp, reducedMotion } from "../ui.js";
 
+// Ya la abrió desde el ícono: no tiene sentido explicarle cómo instalarla
+if (matchMedia("(display-mode: standalone)").matches || navigator.standalone === true) {
+  document.getElementById("instalar")?.remove();
+}
+
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));

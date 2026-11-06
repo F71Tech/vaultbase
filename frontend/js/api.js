@@ -102,7 +102,9 @@ export const isDemoEmail = (email) => email?.endsWith(`@${DEMO_DOMAIN}`);
 // Si no hay sesión, manda al login. Se llama al principio de cada pantalla privada.
 export function requireLogin() {
   if (!auth.loggedIn) {
-    location.replace(`/login.html?next=${encodeURIComponent(location.pathname)}`);
+    // En la app instalada, sin sesión, se arranca por la portada (también con íconos viejos)
+    const installed = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+    location.replace(installed ? "/" : `/login.html?next=${encodeURIComponent(location.pathname)}`);
     return false;
   }
   return true;

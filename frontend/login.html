@@ -13,6 +13,14 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black" />
   <meta name="apple-mobile-web-app-title" content="VaultBase" />
+  <script>
+    // Un ícono guardado desde esta pantalla abre siempre acá. Si la app recién se abre
+    // (nadie te trajo desde otra página), arrancamos por la portada.
+    if ((matchMedia("(display-mode: standalone)").matches || navigator.standalone === true)
+        && !document.referrer && !sessionStorage.getItem("vb-saw-landing")) {
+      location.replace("/");
+    }
+  </script>
   <script src="/js/theme-init.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />

@@ -18,6 +18,7 @@
     // Si hay una sesión VIGENTE, vamos directo al dashboard. Una vencida se descarta y se
     // queda en la portada: si no, el servidor la rechaza y terminás en el login sin ver esto.
     try {
+      sessionStorage.setItem("vb-saw-landing", "1");  // ya pasó por acá: el login no lo vuelve a mandar
       var token = localStorage.getItem("vb-token");
       if (token) {
         // El token trae adentro su fecha de vencimiento ("exp"), en segundos
@@ -458,7 +459,7 @@
     </div>
 
     <!-- Solo en el celular: cómo tenerla como app -->
-    <section class="md:hidden py-12 reveal">
+    <section id="instalar" class="md:hidden py-12 reveal">
       <div class="card p-6">
         <span class="chip mb-4"><i data-lucide="smartphone" class="w-3.5 h-3.5 text-primary"></i>En tu celular</span>
         <h2 class="section-title">Tenela en tu pantalla de inicio.</h2>

@@ -9,8 +9,8 @@
 // Los datos de la API (/api/...) NUNCA se guardan: son tus finanzas.
 // =========================================================================
 
-const CACHE = "vaultbase-v1";
-const OFFLINE_PAGES = ["/dashboard.html", "/offline.html"];
+const CACHE = "vaultbase-v2";
+const OFFLINE_PAGES = ["/", "/dashboard.html", "/offline.html"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((c) => c.addAll(OFFLINE_PAGES)).then(() => self.skipWaiting()));
