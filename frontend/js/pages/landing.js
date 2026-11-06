@@ -1,13 +1,18 @@
-// landing.js · Portada: botones de demo y animaciones al hacer scroll.
+// landing.js · Portada: barra fija, recorrido por la app y animaciones.
+// En la compu el recorrido avanza con el scroll; en el celular, con el dedo.
 
 import { startDemo } from "../api.js";
 import { money } from "../format.js";
 import { countUp, reducedMotion } from "../ui.js";
 
+const $ = (sel, root = document) => root.querySelector(sel);
+const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const isDesktop = () => matchMedia("(min-width: 1024px)").matches;
+const calm = reducedMotion();
 
 // --- Probar la demo (hay un botón arriba y otro al final) ---
-document.querySelectorAll("[data-demo]").forEach((btn) => {
+$$("[data-demo]").forEach((btn) => {
   const label = btn.lastChild.textContent;
   btn.addEventListener("click", async () => {
     btn.disabled = true;
@@ -16,57 +21,161 @@ document.querySelectorAll("[data-demo]").forEach((btn) => {
   });
 });
 
-// --- Lo que pasa en cada dibujo de la app cuando entra en pantalla ---
+$("#year").textContent = new Date().getFullYear();
+
+// --- Barra de arriba ---
+const bar = $(".site-bar");
+const progress = $(".bar-progress");
+const heroPhone = $("[data-hero-phone]");
+let scrollQueued = false;
+function onScroll() {
+  scrollQueued = false;
+  const max = document.documentElement.scrollHeight - innerHeight;
+  bar.classList.toggle("scrolled", scrollY > 12);
+  progress.style.transform = `scaleX(${max > 0 ? Math.min(scrollY / max, 1) : 0})`;
+  // En el celular, el teléfono de arriba sube un poco mientras bajás
+  if (!isDesktop() && !calm && scrollY < innerHeight) heroPhone.style.translate = `0 ${-scrollY * 0.12}px`;
+}
+addEventListener("scroll", () => {
+  if (!scrollQueued) { scrollQueued = true; requestAnimationFrame(onScroll); }
+}, { passive: true });
+onScroll();
+
+// "Crear cuenta" entra en la barra cuando el botón grande de la portada ya no se ve
+new IntersectionObserver(([entry]) => bar.classList.toggle("cta-on", !entry.isIntersecting), {
+  rootMargin: "-70px 0px 0px 0px",
+}).observe($("[data-hero-cta]"));
+
+// --- Primera pantalla ---
 function countAll(root) {
-  root.querySelectorAll("[data-count]").forEach((el) => countUp(el, Number(el.dataset.count) * 100));
+  $$("[data-count]", root).forEach((el) => {
+    el.dataset.value = 0;
+    countUp(el, Number(el.dataset.count) * 100);
+  });
+}
+countAll($("[data-hero]"));
+
+// Compu: las tarjetas se mueven apenas con el mouse, cada una a su profundidad
+if (!calm && matchMedia("(hover: hover)").matches) {
+  const layers = $$("[data-depth]");
+  addEventListener("pointermove", (e) => {
+    if (!isDesktop()) return;
+    const x = e.clientX / innerWidth - 0.5;
+    const y = e.clientY / innerHeight - 0.5;
+    layers.forEach((el) => { el.style.translate = `${-x * el.dataset.depth}px ${-y * el.dataset.depth}px`; });
+  }, { passive: true });
+  // La ventana de navegador se inclina hacia donde está el mouse
+  const browser = $(".browser");
+  browser?.addEventListener("pointermove", (e) => {
+    const r = browser.getBoundingClientRect();
+    const x = (e.clientX - r.left) / r.width - 0.5;
+    const y = (e.clientY - r.top) / r.height - 0.5;
+    browser.style.transform = `perspective(1400px) rotateX(${-y * 4}deg) rotateY(${x * 5}deg)`;
+  });
+  browser?.addEventListener("pointerleave", () => { browser.style.transform = ""; });
 }
 
+// --- Recorrido por la app: un teléfono, varias pantallas ---
+const screens = $$("[data-screen]");
+const texts = $$(".tour-text");
+const chips = $$("[data-chip]");
+const nav = $$("[data-tour-nav] > span");
+const chipRow = $(".tour-chips");
+let current = -1;
+let playId = 0;  // si cambiás de pantalla a la mitad, la animación anterior se corta
+
 /** Gasto rápido: se "escribe" el monto, se elige la categoría y se guarda. */
-async function playExpense(root) {
-  const amount = root.querySelector("[data-typing]");
-  const plata = root.querySelector("[data-plata]");
-  await wait(600);
-  for (const text of ["$ 1", "$ 18", "$ 180"]) {
-    amount.textContent = text;
-    await wait(320);
+async function playExpense(root, id) {
+  const amount = $("[data-typing]", root);
+  const plata = $("[data-plata]", root);
+  const cat = $("[data-pick]", root);
+  root.classList.remove("saved", "pressing");
+  cat.classList.remove("on");
+  amount.textContent = "$ 0";
+  plata.textContent = money(1634000);
+  if (calm) {
+    amount.textContent = "$ 180";
+    cat.classList.add("on");
+    plata.textContent = money(1616000);
+    root.classList.add("saved");
+    return;
   }
-  root.querySelector(".mock-cat[data-pick]").classList.add("on");
-  await wait(650);
+  await wait(800);
+  for (const text of ["$ 1", "$ 18", "$ 180"]) {
+    if (id !== playId) return;
+    amount.textContent = text;
+    await wait(300);
+  }
+  if (id !== playId) return;
+  cat.classList.add("on");
+  await wait(550);
+  if (id !== playId) return;
   root.classList.add("pressing");
-  await wait(180);
+  await wait(170);
   root.classList.remove("pressing");
   root.classList.add("saved");
-  plata.dataset.value = 1634000;  // countUp arranca desde acá y baja hasta el nuevo número
+  plata.dataset.value = 1634000;
   countUp(plata, 1616000);
 }
 
-const PLAYS = { count: countAll, expense: playExpense };
-
-function play(root) {
-  const story = root.dataset.story;
-  if (story) PLAYS[story]?.(root);
-}
-
-// La barra de la portada y su número arrancan apenas abre la página
-countAll(document.querySelector("[data-hero]"));
-requestAnimationFrame(() => setTimeout(() => {
-  document.querySelector("[data-hero] [data-fill]").style.width = `${document.querySelector("[data-hero] [data-fill]").dataset.fill}%`;
-}, 200));
-
-document.getElementById("year").textContent = new Date().getFullYear();
-
-// --- Aparecer al llegar con el scroll ---
-const targets = document.querySelectorAll(".reveal, .step-line");
-if (reducedMotion() || !("IntersectionObserver" in window)) {
-  targets.forEach((el) => el.classList.add("in"));
-  document.querySelectorAll("[data-story]").forEach((el) => {
-    if (el.dataset.story === "expense") {
-      el.querySelector("[data-typing]").textContent = "$ 180";
-      el.querySelector(".mock-cat[data-pick]").classList.add("on");
-      el.querySelector("[data-plata]").textContent = money(1616000);
-      el.classList.add("saved");
+function show(i) {
+  if (i === current) return;
+  current = i;
+  playId += 1;
+  screens.forEach((s, n) => s.classList.toggle("in", n === i));
+  texts.forEach((t, n) => t.classList.toggle("on", n === i));
+  chips.forEach((c, n) => {
+    c.setAttribute("aria-pressed", String(n === i));
+    if (n === i && chipRow.scrollWidth > chipRow.clientWidth) {
+      chipRow.scrollTo({ left: c.offsetLeft - chipRow.clientWidth / 2 + c.offsetWidth / 2, behavior: "smooth" });
     }
   });
+  const active = Number(screens[i].dataset.nav);
+  nav.forEach((n, k) => n.classList.toggle("on", k === active));
+  countAll(screens[i]);
+  if (screens[i].dataset.screen === "expense") playExpense(screens[i], playId);
+}
+
+// Celular: chips, deslizar con el dedo, y avanza solo mientras no lo toques
+let autoplayFrom = 0;
+const holdAutoplay = () => { autoplayFrom = Date.now() + 15000; };
+chips.forEach((chip, i) => chip.addEventListener("click", () => { holdAutoplay(); show(i); }));
+
+const stage = $(".tour-stage");
+let touchX = null;
+stage.addEventListener("touchstart", (e) => { touchX = e.touches[0].clientX; holdAutoplay(); }, { passive: true });
+stage.addEventListener("touchend", (e) => {
+  if (touchX === null) return;
+  const dx = e.changedTouches[0].clientX - touchX;
+  touchX = null;
+  if (Math.abs(dx) > 40) show((current + (dx < 0 ? 1 : -1) + screens.length) % screens.length);
+});
+
+let stageVisible = false;
+new IntersectionObserver(([entry]) => {
+  stageVisible = entry.isIntersecting;
+  if (stageVisible && current < 0) show(0);
+}, { threshold: 0.3 }).observe(stage);
+if (!calm) {
+  setInterval(() => {
+    if (!isDesktop() && stageVisible && !document.hidden && Date.now() > autoplayFrom) {
+      show((current + 1) % screens.length);
+    }
+  }, 6500);
+}
+
+// Compu: la pantalla cambia según el texto que está en el medio
+const textWatcher = new IntersectionObserver((entries) => {
+  if (!isDesktop()) return;
+  entries.forEach((entry) => { if (entry.isIntersecting) show(texts.indexOf(entry.target)); });
+}, { rootMargin: "-45% 0px -45% 0px" });
+texts.forEach((t) => textWatcher.observe(t));
+
+// --- Aparecer al llegar con el scroll ---
+const targets = $$(".reveal, .step-line");
+if (calm || !("IntersectionObserver" in window)) {
+  targets.forEach((el) => el.classList.add("in"));
+  show(0);
 } else {
   // Recién acá escondemos: sin JavaScript la página se ve completa igual
   document.documentElement.classList.add("js-reveal");
@@ -74,7 +183,6 @@ if (reducedMotion() || !("IntersectionObserver" in window)) {
     entries.forEach((entry) => {
       if (!entry.isIntersecting) return;
       entry.target.classList.add("in");
-      play(entry.target);
       seen.unobserve(entry.target);
     });
   }, { threshold: 0.15, rootMargin: "0px 0px -6% 0px" });
