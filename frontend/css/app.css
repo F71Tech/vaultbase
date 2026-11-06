@@ -176,6 +176,18 @@ select.input { appearance: none; background-image: none; }
 .sidebar-link[aria-current="page"] { color: var(--primary); background: var(--primary-soft); }
 .sidebar-link svg { width: 20px; height: 20px; }
 
+/* En la compu la app usa toda la pantalla: menú pegado al borde izquierdo y el
+   contenido ocupa el resto. (Con límite: en monitores enormes, líneas larguísimas cuestan leer.) */
+@media (min-width: 768px) {
+  .app-layout { max-width: none; padding-inline: 0; gap: 0; }
+  .app-layout > aside { width: 16rem; padding-inline: .75rem; background: var(--surface); border-right: 1px solid var(--border); }
+  .app-layout > aside .sidebar-link { text-align: left; }
+  .app-layout > main { max-width: 1680px; margin-inline: auto; padding-inline: 1.5rem; }
+}
+@media (min-width: 1280px) {
+  .app-layout > main { padding-inline: 2.5rem; }
+}
+
 /* En el celular la página entera NO scrollea: scrollea solo el contenido (.app-layout).
    Si scrollea el documento, iOS a veces deja la barra y el "+" trancados a mitad de pantalla;
    así quedan apoyados sobre algo que nunca se mueve. */

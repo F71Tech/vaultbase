@@ -84,14 +84,15 @@
     <section class="grid lg:grid-cols-5 gap-4">
       <div class="card p-5 lg:col-span-2 rise" style="animation-delay:.25s">
         <h2 class="font-display font-semibold text-lg mb-4">Gastos por categoría</h2>
-        <div id="donut-wrap">
-          <div class="relative mx-auto" style="max-width:230px">
+        <!-- En pantallas anchas: gráfico y lista lado a lado, así no queda un hueco en la tarjeta de al lado -->
+        <div id="donut-wrap" class="min-[87.5rem]:grid min-[87.5rem]:grid-cols-2 min-[87.5rem]:gap-5 min-[87.5rem]:items-center">
+          <div class="relative mx-auto w-full" style="max-width:230px">
             <canvas id="donut" aria-label="Gráfico de gastos por categoría" role="img"></canvas>
             <div class="absolute inset-0 grid place-items-center pointer-events-none text-center">
               <div><div class="muted text-xs">Total</div><div class="font-display font-bold text-lg" id="donut-total">$ 0</div></div>
             </div>
           </div>
-          <ul id="legend" class="mt-5 space-y-2 text-sm"></ul>
+          <ul id="legend" class="mt-5 min-[87.5rem]:mt-0 space-y-2 text-sm"></ul>
         </div>
         <div id="donut-empty" class="text-center muted py-10" hidden>
           <i data-lucide="pie-chart" class="w-10 h-10 mx-auto mb-3 opacity-60"></i>Sin gastos este mes todavía.
