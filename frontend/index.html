@@ -15,8 +15,17 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black" />
   <meta name="apple-mobile-web-app-title" content="VaultBase" />
   <script>
-    // Si ya hay sesión, vamos directo al dashboard
-    try { if (localStorage.getItem("vb-token")) location.replace("/dashboard.html"); } catch (e) {}
+    // Si hay una sesión VIGENTE, vamos directo al dashboard. Una vencida se descarta y se
+    // queda en la portada: si no, el servidor la rechaza y terminás en el login sin ver esto.
+    try {
+      var token = localStorage.getItem("vb-token");
+      if (token) {
+        // El token trae adentro su fecha de vencimiento ("exp"), en segundos
+        var payload = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+        if (payload.exp * 1000 > Date.now()) location.replace("/dashboard.html");
+        else localStorage.removeItem("vb-token");
+      }
+    } catch (e) { localStorage.removeItem("vb-token"); }  // token roto: tampoco sirve
   </script>
   <script src="/js/theme-init.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />

@@ -7,11 +7,20 @@
 // =========================================================================
 
 const TOKEN_KEY = "vb-token";
+const DEMO_KEY = "vb-session-demo";  // la sesión actual es de una demo (se borran solas)
+let sessionEnded = false;  // el servidor ya rechazó la sesión y estamos saliendo de esta pantalla
 
 export const auth = {
   get token() { return localStorage.getItem(TOKEN_KEY); },
-  save(token) { localStorage.setItem(TOKEN_KEY, token); },
-  clear() { localStorage.removeItem(TOKEN_KEY); },
+  save(token, { demo = false } = {}) {
+    localStorage.setItem(TOKEN_KEY, token);
+    if (demo) localStorage.setItem(DEMO_KEY, "1");
+    else localStorage.removeItem(DEMO_KEY);
+  },
+  clear() {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(DEMO_KEY);
+  },
   get loggedIn() { return Boolean(this.token); },
 };
 
@@ -61,10 +70,16 @@ export async function api(path, { method = "GET", body, form } = {}) {
     throw new ApiError("No hay conexión con el servidor.", 0);
   }
 
-  // Sesión vencida o inválida: volvemos al login (salvo que ya estemos ahí)
+  // Sesión vencida o inválida: volvemos al login (salvo que ya estemos ahí).
+  // Si era una demo ya borrada no hay cuenta a la que volver: va a la portada.
   if (res.status === 401 && !path.startsWith("/api/auth/")) {
-    auth.clear();
-    location.href = `/login.html?next=${encodeURIComponent(location.pathname)}`;
+    // Suelen rechazarse varios pedidos a la vez: decide solo el primero (después ya no hay datos para decidir).
+    if (!sessionEnded) {
+      sessionEnded = true;
+      const wasDemo = localStorage.getItem(DEMO_KEY) === "1";
+      auth.clear();
+      location.href = wasDemo ? "/" : `/login.html?next=${encodeURIComponent(location.pathname)}`;
+    }
     throw new ApiError("Tu sesión venció.", 401);
   }
 
@@ -77,7 +92,7 @@ export async function api(path, { method = "GET", body, form } = {}) {
 /** Crea una cuenta demo nueva (con datos de ejemplo) y entra al dashboard. */
 export async function startDemo() {
   const { access_token } = await api("/api/auth/demo", { method: "POST" });
-  auth.save(access_token);
+  auth.save(access_token, { demo: true });
   location.href = "/dashboard.html";
 }
 
