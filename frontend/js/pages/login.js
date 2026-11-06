@@ -19,6 +19,13 @@ function setMode(next) {
   document.getElementById("name-field").hidden = mode !== "register";
   document.getElementById("title").textContent = TEXTS[mode].title;
   document.getElementById("subtitle").textContent = TEXTS[mode].subtitle;
+  // El título entra de nuevo al cambiar entre Ingresar y Crear cuenta
+  for (const id of ["title", "subtitle"]) {
+    const el = document.getElementById(id);
+    el.classList.remove("rise");
+    void el.offsetWidth;  // truco: fuerza al navegador a "olvidar" la animación anterior
+    el.classList.add("rise");
+  }
   submitBtn.textContent = TEXTS[mode].button;
   form.password.autocomplete = mode === "register" ? "new-password" : "current-password";
   errorEl.textContent = "";

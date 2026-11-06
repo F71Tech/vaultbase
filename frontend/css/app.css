@@ -144,6 +144,18 @@ select.input { appearance: none; background-image: none; }
 /* ===== Animaciones de entrada ===== */
 @keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
 .rise { animation: rise .6s var(--ease) both; }
+.rise-wait { animation-play-state: paused; }  /* espera a que llegues con el scroll (shell.js) */
+/* Formulario: cada campo entra un poquito después del anterior */
+.stagger > * { animation: rise .6s var(--ease) both; }
+.stagger > :nth-child(2) { animation-delay: .07s; }
+.stagger > :nth-child(3) { animation-delay: .14s; }
+.stagger > :nth-child(4) { animation-delay: .21s; }
+.stagger > :nth-child(5) { animation-delay: .28s; }
+/* Lo que se toca responde al dedo */
+.btn:active:not(:disabled), .chip:active, .cat-btn:active, .row:active { transform: scale(.97); }
+.bottom-nav a { transition: transform .15s ease, color .2s; }
+.bottom-nav a:active { transform: scale(.9); }
+.fab:active { transform: scale(.92); }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
 .fade { animation: fade .4s ease both; }
 

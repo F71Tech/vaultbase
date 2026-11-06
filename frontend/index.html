@@ -24,6 +24,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.1.11"></script>
   <script src="https://cdn.jsdelivr.net/npm/lucide@0.468.0/dist/umd/lucide.min.js"></script>
   <link rel="stylesheet" href="/css/app.css" />
+  <link rel="stylesheet" href="/css/landing.css" />
   <style>
     .glow { position: absolute; inset: -20% -10% auto; height: 70vh; pointer-events: none;
             background: radial-gradient(closest-side, var(--primary-soft), transparent 70%); filter: blur(10px); }
@@ -34,9 +35,13 @@
   <div class="relative mx-auto max-w-6xl px-4">
     <header class="flex items-center justify-between py-6">
       <div class="font-display text-2xl font-bold">Vault<span class="text-primary">Base</span></div>
-      <a href="/login.html" class="btn btn-ghost">Ingresar</a>
+      <nav class="flex items-center gap-5">
+        <a href="#como-funciona" class="hidden sm:inline muted text-sm font-medium">Cómo funciona</a>
+        <a href="/login.html" class="btn btn-ghost">Ingresar</a>
+      </nav>
     </header>
 
+    <main>
     <section class="grid lg:grid-cols-2 gap-12 items-center py-10 lg:py-20">
       <div>
         <span class="chip rise mb-5"><span class="text-accent">●</span> Hecho para Uruguay · pesos y dólares</span>
@@ -49,17 +54,17 @@
         </p>
         <div class="rise flex flex-wrap gap-3 mt-8" style="animation-delay:.24s">
           <a href="/login.html?mode=register" class="btn btn-primary">Crear cuenta gratis <i data-lucide="arrow-right" class="w-4 h-4"></i></a>
-          <button class="btn btn-ghost" id="demo-btn"><i data-lucide="play" class="w-4 h-4"></i>Probar la demo</button>
+          <button class="btn btn-ghost" data-demo><i data-lucide="play" class="w-4 h-4"></i>Probar la demo</button>
         </div>
         <p class="rise muted text-sm mt-3" style="animation-delay:.28s">La demo trae datos de ejemplo y no pide registro. ¿Ya tenés cuenta? <a href="/login.html" class="text-primary font-medium">Ingresá</a>.</p>
       </div>
 
-      <div class="rise grid grid-cols-2 gap-3" style="animation-delay:.3s">
-        <div class="card p-5 col-span-2">
+      <div class="rise grid grid-cols-2 gap-3" style="animation-delay:.3s" data-hero>
+        <div class="card p-5 col-span-2 float">
           <div class="flex items-center justify-between mb-3"><span class="muted text-sm">Ahorro posible este mes</span>
             <span class="icon-badge bg-accent-soft text-accent"><i data-lucide="piggy-bank"></i></span></div>
-          <div class="font-display text-4xl font-bold text-accent">$ 29.947</div>
-          <div class="bar mt-4"><span style="width:68%;background:var(--primary)"></span></div>
+          <div class="font-display text-4xl font-bold text-accent" data-count="29947">$ 29.947</div>
+          <div class="bar mt-4"><span data-fill="68" style="background:var(--primary)"></span></div>
         </div>
         <div class="card p-5"><i data-lucide="zap" class="text-primary mb-3"></i><div class="font-semibold">Gasto rápido</div>
           <p class="muted text-sm mt-1">El alfajor de hoy, anotado en 3 toques.</p></div>
@@ -71,17 +76,190 @@
           <p class="muted text-sm mt-1">Nominal → líquido y aguinaldo, a la uruguaya.</p></div>
       </div>
     </section>
-    <footer class="muted text-sm py-10 text-center">VaultBase · proyecto de portfolio</footer>
+
+    <!-- Cinta: lo que la app entiende -->
+    <div class="ribbon py-2" aria-label="Lo que VaultBase tiene en cuenta: sueldo líquido, aguinaldo, adelantos, comisiones, ticket de alimentación, dólar BCU, cuotas y suscripciones.">
+      <div class="ribbon-track" aria-hidden="true">
+        <span class="chip">Sueldo líquido</span><span class="chip">Aguinaldo</span><span class="chip">Adelantos</span><span class="chip">Comisiones</span><span class="chip">Ticket de alimentación</span><span class="chip">Dólar BCU</span><span class="chip">Cuotas</span><span class="chip">Suscripciones</span><span class="chip">Gastos fijos</span><span class="chip">Metas de ahorro</span>
+        <span class="chip">Sueldo líquido</span><span class="chip">Aguinaldo</span><span class="chip">Adelantos</span><span class="chip">Comisiones</span><span class="chip">Ticket de alimentación</span><span class="chip">Dólar BCU</span><span class="chip">Cuotas</span><span class="chip">Suscripciones</span><span class="chip">Gastos fijos</span><span class="chip">Metas de ahorro</span>
+      </div>
+    </div>
+
+    <!-- Cómo funciona -->
+    <section id="como-funciona" class="py-16 lg:py-24 scroll-mt-6">
+      <div class="reveal max-w-2xl">
+        <h2 class="section-title">Cobrás, pagás… y a fin de mes, ¿a dónde se fue?</h2>
+        <p class="muted text-lg mt-4">VaultBase te lo responde todos los días. Sin planillas, sin conectar tu banco y sin darle tu tarjeta a nadie.</p>
+      </div>
+      <div class="step-line mt-10"></div>
+      <div class="grid md:grid-cols-3 gap-4 mt-6">
+        <div class="card p-6 reveal"><span class="icon-badge bg-primary-soft text-primary font-display font-bold mb-4">1</span>
+          <h3 class="font-display text-xl font-bold">Contale lo básico</h3>
+          <p class="muted mt-2">Tu sueldo, qué día cobrás y tus gastos fijos, como el alquiler o la UTE. Se carga una vez.</p></div>
+        <div class="card p-6 reveal" style="--d:.15s"><span class="icon-badge bg-primary-soft text-primary font-display font-bold mb-4">2</span>
+          <h3 class="font-display text-xl font-bold">Anotá lo del día</h3>
+          <p class="muted mt-2">Tocás el +, ponés el monto y la categoría. Lo hacés en la fila del súper.</p></div>
+        <div class="card p-6 reveal" style="--d:.3s"><span class="icon-badge bg-accent-soft text-accent font-display font-bold mb-4">3</span>
+          <h3 class="font-display text-xl font-bold">Mirá tu respuesta</h3>
+          <p class="muted mt-2">Cuánta plata tenés, cuánto gastar por día y cuánto te puede sobrar hasta tu próximo cobro.</p></div>
+      </div>
+    </section>
+
+    <!-- Tu plata hoy -->
+    <section class="grid lg:grid-cols-2 gap-10 items-center py-12 lg:py-20">
+      <div class="reveal">
+        <span class="chip mb-4"><i data-lucide="wallet" class="w-3.5 h-3.5 text-primary"></i>Tu plata hoy</span>
+        <h2 class="section-title">Abrís la app y ya sabés cuánto podés gastar.</h2>
+        <p class="muted text-lg mt-4">Suma lo que entró y resta lo que gastaste, sin que tengas que escribir ningún saldo. También tiene en cuenta lo que viene: adelantos, cuentas y suscripciones hasta tu próximo cobro.</p>
+      </div>
+      <div class="card p-5 mock reveal" data-story="count" style="--d:.1s">
+        <div class="muted text-sm">Tu plata hoy</div>
+        <div class="font-display text-4xl font-bold mt-1" data-count="16340">$ 16.340</div>
+        <div class="text-xs mt-2 space-y-1">
+          <div class="flex justify-between part" style="--d:.3s"><span class="muted">Te entró este mes</span><span class="text-success">+$ 52.119</span></div>
+          <div class="flex justify-between part" style="--d:.4s"><span class="muted">Gastaste hasta hoy</span><span>−$ 35.779</span></div>
+        </div>
+        <div class="grid grid-cols-2 gap-3 mt-4">
+          <div class="rounded-xl p-3 bg-primary-soft part" style="--d:.55s">
+            <div class="muted text-xs">Para gastar por día</div>
+            <div class="font-display text-xl font-bold text-primary" data-count="688">$ 688</div>
+          </div>
+          <div class="rounded-xl p-3 bg-accent-soft part" style="--d:.7s">
+            <div class="muted text-xs">Podés ahorrar</div>
+            <div class="font-display text-xl font-bold text-accent" data-count="14308">$ 14.308</div>
+            <div class="bar mt-2" style="height:5px"><span class="mock-fill" style="--w:44%;background:var(--accent)"></span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Gasto rápido -->
+    <section class="story-flip grid lg:grid-cols-2 gap-10 items-center py-12 lg:py-20">
+      <div class="reveal lg:order-2">
+        <span class="chip mb-4"><i data-lucide="zap" class="w-3.5 h-3.5 text-primary"></i>Gasto rápido</span>
+        <h2 class="section-title">Anotar un gasto tarda menos que pagarlo.</h2>
+        <p class="muted text-lg mt-4">Monto, categoría y listo. En pesos o en dólares, y si tenés ticket de alimentación, sabe qué parte de la comida salió de ahí. Tus números se actualizan al instante.</p>
+      </div>
+      <div class="card p-5 mock reveal lg:order-1" data-story="expense" style="--d:.1s">
+        <div class="flex items-center justify-between"><span class="font-display font-bold">Gasto rápido</span>
+          <span class="chip">$U</span></div>
+        <div class="mock-amount my-4" data-typing>$ 0</div>
+        <div class="grid grid-cols-4 gap-2">
+          <div class="cat-btn mock-cat" data-pick><i data-lucide="utensils"></i>Comida</div>
+          <div class="cat-btn mock-cat"><i data-lucide="bus"></i>Transporte</div>
+          <div class="cat-btn mock-cat"><i data-lucide="house"></i>Vivienda</div>
+          <div class="cat-btn mock-cat"><i data-lucide="plug"></i>Servicios</div>
+        </div>
+        <div class="btn btn-primary w-full mt-4 mock-save">Guardar</div>
+        <div class="toast mock-toast mt-3" style="animation:none"><i data-lucide="circle-check" class="text-success"></i>
+          <span class="flex-1">Tu plata ahora</span><b class="font-display" data-plata>$ 16.340</b></div>
+      </div>
+    </section>
+
+    <!-- Metas -->
+    <section class="grid lg:grid-cols-2 gap-10 items-center py-12 lg:py-20">
+      <div class="reveal">
+        <span class="chip mb-4"><i data-lucide="target" class="w-3.5 h-3.5 text-accent"></i>Metas</span>
+        <h2 class="section-title">Cada meta viene con su plan.</h2>
+        <p class="muted text-lg mt-4">Decile a dónde querés llegar y te dice cuánto apartar y cuánto podés gastar por día hasta esa fecha. Tiene en cuenta tus cobros, tus gastos y hasta el aguinaldo.</p>
+      </div>
+      <div class="card p-5 mock reveal" style="--d:.1s">
+        <div class="flex items-center gap-4">
+          <div class="relative shrink-0 w-24 h-24">
+            <svg class="mock-ring" width="100%" height="100%" viewBox="0 0 120 120" aria-hidden="true">
+              <circle class="track" cx="60" cy="60" r="52" /><circle class="value" cx="60" cy="60" r="52" />
+            </svg>
+            <div class="absolute inset-0 grid place-items-center font-display text-xl font-bold">72%</div>
+          </div>
+          <div class="min-w-0">
+            <div class="font-display text-lg font-bold">Viaje a Florianópolis</div>
+            <div class="text-sm mt-1"><b>$ 32.400</b> <span class="muted">de $ 45.000</span></div>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3 mt-4">
+          <div class="rounded-xl p-3 bg-accent-soft part" style="--d:.5s"><div class="muted text-xs">Apartá por mes</div><div class="font-display text-lg font-bold text-accent">$ 3.150</div></div>
+          <div class="rounded-xl p-3 bg-primary-soft part" style="--d:.65s"><div class="muted text-xs">Podés gastar por día</div><div class="font-display text-lg font-bold text-primary">$ 768</div></div>
+        </div>
+        <p class="text-sm mt-3 part" style="--d:.85s"><i data-lucide="gift" class="inline w-4 h-4 text-accent"></i> Con tu aguinaldo, llegás antes.</p>
+      </div>
+    </section>
+
+    <!-- Simulador -->
+    <section class="story-flip grid lg:grid-cols-2 gap-10 items-center py-12 lg:py-20">
+      <div class="reveal lg:order-2">
+        <span class="chip mb-4"><i data-lucide="calculator" class="w-3.5 h-3.5 text-accent"></i>Simulador</span>
+        <h2 class="section-title">¿Te da para comprarlo? Preguntá antes.</h2>
+        <p class="muted text-lg mt-4">Poné el precio y compará pagar contado, en cuotas o esperar. Ves cómo cambia tu mes, tu año y tus metas, y te recomienda la forma que menos te afecta.</p>
+      </div>
+      <div class="mock space-y-3 lg:order-1">
+        <div class="card p-4 reveal"><div class="muted text-sm">Celular nuevo</div><div class="font-display text-2xl font-bold">$ 45.000</div></div>
+        <div class="card p-4 flex justify-between gap-3 reveal" style="--d:.15s"><span>Contado</span><span class="muted text-sm text-right">Atrasa tus metas</span></div>
+        <div class="card p-4 flex justify-between gap-3 reveal" style="--d:.3s"><span>6 cuotas sin interés</span><span class="muted text-sm text-right">$ 7.500 por mes</span></div>
+        <div class="card p-4 glow-border reveal" style="--d:.45s">
+          <div class="flex justify-between gap-3"><b>Esperar al aguinaldo</b><span class="chip text-accent shrink-0"><i data-lucide="star" class="w-3.5 h-3.5"></i>Recomendada</span></div>
+          <p class="muted text-sm mt-1">Lo pagás sin tocar tu ahorro de todos los meses.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Hecho para Uruguay -->
+    <section class="grid lg:grid-cols-2 gap-10 items-center py-12 lg:py-20">
+      <div class="reveal">
+        <span class="chip mb-4"><span class="text-accent">●</span> Hecho para Uruguay</span>
+        <h2 class="section-title">Entiende tu sueldo, tu aguinaldo y tus dólares.</h2>
+        <p class="muted text-lg mt-4">Pasa de nominal a líquido con BPS, FONASA, FRL e IRPF, y calcula tu aguinaldo. Lo que pagás en dólares se convierte con la cotización del BCU. También contempla adelantos, comisiones semanales y ticket de alimentación.</p>
+      </div>
+      <div class="card p-5 mock reveal" style="--d:.1s">
+        <div class="flex items-end justify-between gap-3">
+          <div><div class="muted text-sm">Sueldo nominal</div><div class="font-display text-lg font-bold">$ 95.000</div></div>
+          <div class="text-right"><div class="muted text-sm">Cobrás</div><div class="font-display text-3xl font-bold text-primary">$ 72.119</div></div>
+        </div>
+        <div class="mock-stack mt-4" aria-hidden="true">
+          <span style="--w:75.9%;background:var(--primary)"></span><span style="--w:15%;background:var(--cat-3)"></span><span style="--w:4.5%;background:var(--cat-5)"></span><span style="--w:4.5%;background:var(--accent)"></span>
+        </div>
+        <ul class="text-xs mt-3 space-y-1.5">
+          <li class="flex justify-between part" style="--d:.5s"><span class="muted">Aporte jubilatorio (BPS)</span><span>−$ 14.250</span></li>
+          <li class="flex justify-between part" style="--d:.6s"><span class="muted">FONASA y FRL</span><span>−$ 4.370</span></li>
+          <li class="flex justify-between part" style="--d:.7s"><span class="muted">IRPF</span><span>−$ 4.261</span></li>
+        </ul>
+        <div class="rounded-xl p-3 bg-primary-soft mt-4 flex justify-between items-center gap-3 text-sm part" style="--d:.85s">
+          <span>Spotify · US$ 11,99</span><b class="font-display">≈ $ 482</b></div>
+      </div>
+    </section>
+
+    <!-- Preguntas -->
+    <section class="py-12 lg:py-20">
+      <h2 class="section-title reveal">Lo que seguro querés saber.</h2>
+      <div class="grid md:grid-cols-2 gap-3 mt-8 items-start">
+        <details class="card p-5 faq reveal"><summary>¿Tengo que conectar mi banco o poner mi tarjeta?<i data-lucide="chevron-down" class="w-5 h-5 muted"></i></summary>
+          <p class="muted mt-3">No. Vos cargás tus ingresos y gastos, y la app hace las cuentas. No te pide datos del banco ni de tu tarjeta.</p></details>
+        <details class="card p-5 faq reveal" style="--d:.08s"><summary>¿Cuánto cuesta?<i data-lucide="chevron-down" class="w-5 h-5 muted"></i></summary>
+          <p class="muted mt-3">Crear tu cuenta es gratis. También podés probar la demo sin registrarte.</p></details>
+        <details class="card p-5 faq reveal" style="--d:.16s"><summary>¿Se puede usar en el celular?<i data-lucide="chevron-down" class="w-5 h-5 muted"></i></summary>
+          <p class="muted mt-3">Sí. Se abre desde el navegador y se agrega a tu pantalla de inicio en iPhone o Android, con su ícono, como cualquier app.</p></details>
+        <details class="card p-5 faq reveal" style="--d:.24s"><summary>¿Quién puede ver mis datos?<i data-lucide="chevron-down" class="w-5 h-5 muted"></i></summary>
+          <p class="muted mt-3">Tu contraseña se guarda cifrada: nadie puede leerla. El administrador ve estadísticas de uso sin montos; tus números solo si vos activás "Compartir mis datos" para que te ayude.</p></details>
+        <details class="card p-5 faq reveal" style="--d:.32s"><summary>¿Los cálculos de sueldo son exactos?<i data-lucide="chevron-down" class="w-5 h-5 muted"></i></summary>
+          <p class="muted mt-3">Son una estimación con los valores oficiales del año. Para trabajadores dependientes; tu recibo puede variar un poco.</p></details>
+        <details class="card p-5 faq reveal" style="--d:.4s"><summary>¿Qué pasa con la demo?<i data-lucide="chevron-down" class="w-5 h-5 muted"></i></summary>
+          <p class="muted mt-3">Te crea una cuenta con datos de ejemplo para que toques todo. Se borra sola en unas horas.</p></details>
+      </div>
+    </section>
+
+    <!-- Cierre -->
+    <section class="card p-8 md:p-14 text-center reveal my-8">
+      <h2 class="section-title">Empezá hoy. En 5 minutos ya tenés tu número.</h2>
+      <p class="muted text-lg mt-4">Sin tarjeta y sin conectar tu banco.</p>
+      <div class="flex flex-wrap justify-center gap-3 mt-8">
+        <a href="/login.html?mode=register" class="btn btn-primary">Crear cuenta gratis <i data-lucide="arrow-right" class="w-4 h-4"></i></a>
+        <button class="btn btn-ghost" data-demo><i data-lucide="play" class="w-4 h-4"></i>Probar la demo</button>
+      </div>
+    </section>
+    </main>
+
+    <footer class="muted text-sm py-10 text-center">© <span id="year">2026</span> Enzo · Todos los derechos reservados.</footer>
   </div>
   <script>lucide.createIcons();</script>
-  <script type="module">
-    import { startDemo } from "/js/api.js";
-    const btn = document.getElementById("demo-btn");
-    btn.addEventListener("click", async () => {
-      btn.disabled = true;
-      btn.lastChild.textContent = "Preparando la demo…";
-      try { await startDemo(); } catch { btn.disabled = false; btn.lastChild.textContent = "Probar la demo"; }
-    });
-  </script>
+  <script type="module" src="/js/pages/landing.js"></script>
 </body>
 </html>

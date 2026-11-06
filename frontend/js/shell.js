@@ -9,7 +9,7 @@ import { openExpenseSheet } from "./expense-form.js";
 import { isInstalled, maybeSuggestInstall, openInstall } from "./install.js";
 import { setupRefresh } from "./refresh.js";
 import { resumeTour, startTour } from "./tour.js";
-import { confirmDialog, createSheet, esc, icons, toast, toggleTheme } from "./ui.js";
+import { confirmDialog, createSheet, esc, icons, reducedMotion, toast, toggleTheme } from "./ui.js";
 
 const NAV = [
   { href: "/dashboard.html", icon: "layout-dashboard", label: "Inicio", short: "Inicio" },
@@ -155,6 +155,28 @@ function showDemoBanner() {
 }
 
 /**
+ * Los bloques entran cuando llegás a ellos con el scroll, no todos al abrir la pantalla
+ * (si no, los de abajo terminan su animación antes de que los veas).
+ */
+function revealOnScroll() {
+  if (reducedMotion() || !("IntersectionObserver" in window)) return;
+  const opened = performance.now();
+  const seen = new IntersectionObserver((entries) => {
+    entries.forEach((entry) => {
+      if (!entry.isIntersecting) return;
+      // La demora escalonada es para la primera vista; al scrollear, entra enseguida
+      if (performance.now() - opened > 1000) entry.target.style.animationDelay = "0s";
+      entry.target.classList.remove("rise-wait");
+      seen.unobserve(entry.target);
+    });
+  }, { rootMargin: "0px 0px -5% 0px" });
+  document.querySelectorAll("main .rise").forEach((el) => {
+    el.classList.add("rise-wait");
+    seen.observe(el);
+  });
+}
+
+/**
  * Completa el esqueleto de la página: el HTML ya trae
  *   <div class="app-layout"><aside id="sidebar"></aside><main>…</main></div>
  * y acá rellenamos el menú. (No movemos el <main> de lugar: mover un elemento
@@ -255,6 +277,7 @@ export function mountShell() {
     if (scrollY && !typing && matchMedia("(max-width: 767px)").matches) scrollTo(0, 0);
   }, 100));
 
+  revealOnScroll();
   maybeSuggestInstall();
   setupRefresh();
   resumeTour();  // si venías en medio del recorrido completo, sigue en esta pantalla

@@ -16,7 +16,7 @@ export const esc = (text) =>
 /** Lee el valor de un token de color, ej: css("--primary") -> "#4FB3E8" */
 export const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
-const reducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+export const reducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 // --- Avisos flotantes ("toast") ---
 export function toast(message, type = "success") {
