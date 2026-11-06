@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     app_env: str = "development"  # "production" en el servidor
     secret_key: str = DEV_SECRET
     database_url: str = "sqlite:///./vaultbase.db"
-    access_token_expire_minutes: int = 60 * 24  # 1 día
+    access_token_expire_minutes: int = 60 * 24 * 30  # 30 días
     # Emails de los administradores, separados por coma (ej: "yo@mail.com").
     # Pueden ver estadísticas de uso, generar links para restablecer contraseñas
     # y ver los datos de quien haya aceptado compartirlos.
